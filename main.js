@@ -336,7 +336,14 @@ function nextAutoColor() {
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) state = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  } catch {}
+  } catch {
+    // Fichero corrupto (p. ej. un apagado a mitad de escritura con el guardado de antes).
+    // Antes se seguía con el estado vacío y el siguiente guardado machacaba TODO el
+    // historial. Ahora se aparta una copia intacta y se prueba con el .tmp, que es una
+    // escritura completa que no llegó a renombrarse.
+    try { fs.copyFileSync(DATA_FILE, `${DATA_FILE}.corrupt-${Date.now()}`); } catch {}
+    try { state = JSON.parse(fs.readFileSync(DATA_FILE + '.tmp', 'utf8')); } catch {}
+  }
   if (!Array.isArray(state.groups)) state.groups = [];
   state.tasks.forEach(t => {
     if (t.archived === undefined) t.archived = false;
@@ -358,8 +365,20 @@ function loadData() {
   } catch {}
 }
 
+// Escritura atómica: primero a un .tmp y luego se renombra encima. Si el PC se apaga a
+// mitad, el fichero bueno sigue entero. Sin sangría: es un 30-40 % más pequeño y se
+// escribe en cada acción.
 function saveDataRaw() {
-  try { fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2)); } catch {}
+  const json = JSON.stringify(state);
+  const tmp = DATA_FILE + '.tmp';
+  try {
+    fs.writeFileSync(tmp, json);
+    fs.renameSync(tmp, DATA_FILE);
+  } catch {
+    // El antivirus o el indexador a veces bloquean el renombrado (EPERM/EBUSY): mejor
+    // guardar directamente que no guardar.
+    try { fs.writeFileSync(DATA_FILE, json); } catch {}
+  }
 }
 function saveData() {
   saveDataRaw();
