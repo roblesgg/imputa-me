@@ -487,7 +487,6 @@
 const { ipcRenderer } = require('electron');
 
 let currentState = null;
-let ticker = null;
 let colorPopupTaskId = null;
 let archivePopupTaskId = null;
 let lastNoteTaskId = null;
@@ -854,7 +853,9 @@ function updateRowContent(row, t, state) {
   const timeEl = pill.querySelector('.task-time');
   if (timeEl) timeEl.textContent = fmt(t.todaySecs);
   const playBtn = pill.querySelector('.task-pill-actions .icon-btn:last-child');
-  if (playBtn) {
+  // El SVG solo se rehace si el botón cambia de estado, no en cada segundo.
+  if (playBtn && playBtn.dataset.on !== String(isActive)) {
+    playBtn.dataset.on = String(isActive);
     playBtn.className = 'icon-btn ' + (isActive ? 'is-playing' : 'is-stopped');
     playBtn.title = isActive ? 'Pausar' : 'Iniciar';
     playBtn.innerHTML = isActive ? SVG_PAUSE : SVG_PLAY;
@@ -870,7 +871,8 @@ function updateRowContent(row, t, state) {
       const activa = isActive && sub.id === state.activeSubId;
       fila.classList.toggle('active', activa);
       const play = fila.querySelector('.icon-btn.play');
-      if (play) {
+      if (play && play.dataset.on !== String(activa)) {
+        play.dataset.on = String(activa);
         play.className = 'icon-btn play ' + (activa ? 'is-playing' : 'is-stopped');
         play.title = activa ? 'Pausar' : 'Iniciar';
         play.innerHTML = activa ? SVG_PAUSE : SVG_PLAY;
@@ -967,8 +969,12 @@ function render(state) {
   const ongoing = restantes.filter(t => taskTypeOf(t) === 'ongoing');
   const oneshots = restantes.filter(t => taskTypeOf(t) === 'oneShot');
   const showSections = panelFilter === 'all' && ongoing.length && oneshots.length;
-  const flatIds = restantes.map(t => t.id).join(',') + '|' + panelFilter + (showSections ? '|sec' : '');
-  const sameSet = lastRenderedIds === flatIds && !showSections;
+  // El tipo va en la clave: si una tarea cambia de sección hay que reconstruir. Antes,
+  // con secciones, se reconstruía SIEMPRE, y con un estado por segundo la lista se
+  // rehacía (y volvía a animar su entrada) sin parar, perdiendo lo que se estuviera
+  // escribiendo en una subtarea.
+  const flatIds = restantes.map(t => t.id + ':' + taskTypeOf(t)).join(',') + '|' + panelFilter + (showSections ? '|sec' : '');
+  const sameSet = lastRenderedIds === flatIds;
   if (sameSet) {
     restantes.forEach(t => {
       const row = list.querySelector(`[data-task-id="${t.id}"]`);
@@ -997,12 +1003,9 @@ function render(state) {
   }
 }
 
-if (ticker) clearInterval(ticker);
-ticker = setInterval(() => {
-  if (!currentState || !currentState.activeTaskId) return;
-  const t = currentState.tasks.find(t => t.id === currentState.activeTaskId);
-  if (t) { t.todaySecs++; currentState.todayTotal++; render(currentState); }
-}, 1000);
+// Sin ticker propio: con una tarea en marcha el proceso principal ya manda el estado
+// cada segundo (startTick). Contar también aquí pintaba dos veces por segundo y, con
+// una subtarea activa, el reloj daba saltos (sumaba a la tarea, no a la subtarea).
 
 let activeNoteDebounce = null;
 document.getElementById('activeNoteInput').addEventListener('input', () => {

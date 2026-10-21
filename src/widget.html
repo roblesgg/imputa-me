@@ -82,7 +82,6 @@
 <script>
 const { ipcRenderer } = require('electron');
 let currentState = null;
-let ticker = null;
 
 function fmt(secs) {
   const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60;
@@ -122,12 +121,8 @@ function render(state) {
   document.getElementById('totalTime').textContent = `Hoy: ${fmt(state.todayTotal)}`;
 }
 
-if (ticker) clearInterval(ticker);
-ticker = setInterval(() => {
-  if (!currentState || !currentState.activeTaskId) return;
-  const t = currentState.tasks.find(t => t.id === currentState.activeTaskId);
-  if (t) { t.todaySecs++; currentState.todayTotal++; render(currentState); }
-}, 1000);
+// Sin ticker propio: el proceso principal manda el estado cada segundo mientras hay
+// una tarea en marcha, que es justo cuando existe el recordatorio.
 
 function pause() { ipcRenderer.send('action', { type:'pause' }); dismiss(); }
 function openMain() { ipcRenderer.send('action', { type:'open-main' }); dismiss(); }
