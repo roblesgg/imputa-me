@@ -910,7 +910,7 @@ function resetReminderTimer() {
 function showReminder() {
   if (!state.activeTaskId) return;
   if (dndActive()) { reminderTimer = setTimeout(showReminder, getReminderMs()); return; }
-  if (widgetWin && !widgetWin.isDestroyed()) { widgetWin.showInactive(); scheduleWidgetAutoHide(); }
+  if (widgetWin && !widgetWin.isDestroyed()) { sendStateToWindow(widgetWin); widgetWin.showInactive(); scheduleWidgetAutoHide(); }
   else createWidgetWindow();
   reminderTimer = setTimeout(showReminder, getReminderMs());
 }
@@ -1336,7 +1336,7 @@ function createEyeCareWindow() {
     // focusable:false para no sacar al usuario de lo que esté haciendo; el clic para
     // quitarla de en medio sigue llegando igual.
     skipTaskbar: true, alwaysOnTop: true, focusable: false, show: false,
-    webPreferences: { nodeIntegration: true, contextIsolation: false , backgroundThrottling: false},
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
   // 'screen-saver' la pone por encima incluso de aplicaciones a pantalla completa,
   // que es justo cuando más falta hace acordarse de mirar a lo lejos.
@@ -1577,8 +1577,11 @@ function makeWindow(file, w, h, opts = {}) {
     resizable: true, roundedCorners: true,
     icon: APP_ICON_PATH,
     ...restOpts,
-    // Sin frenado en segundo plano: estas ventanas animan aunque no tengan el foco.
-    webPreferences: { nodeIntegration: true, contextIsolation: false, backgroundThrottling: false },
+    // Con el frenado de Chromium por defecto: una ventana visible sin foco sigue animando
+    // igual; solo deja de pintar la que está oculta, minimizada o tapada del todo. Con
+    // backgroundThrottling:false las ventanas escondidas (panel plegado, recordatorio)
+    // seguían dibujando frames todo el día y el proceso de GPU no paraba.
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
   win.__sizeSpec = { minWidth: designMinW, minHeight: designMinH, maxWidth: designMaxW, maxHeight: designMaxH };
   win.on('focus', () => checkForUpdatesIfStale());   // volver a la app = buen momento para mirar
@@ -1699,7 +1702,8 @@ function createDockPanel() {
     backgroundMaterial: settings.blurEnabled === false ? 'none' : 'acrylic',
     resizable: false, movable: false, skipTaskbar: true, alwaysOnTop: true, roundedCorners: true,
     icon: APP_ICON_PATH,
-    webPreferences: { nodeIntegration: true, contextIsolation: false, nodeIntegrationInSubFrames: true , backgroundThrottling: false},
+    // Sin backgroundThrottling:false: plegado está oculto y no debe pintar (ver makeWindow).
+    webPreferences: { nodeIntegration: true, contextIsolation: false, nodeIntegrationInSubFrames: true },
   });
   try { dockPanelWin.setAlwaysOnTop(true, 'screen-saver'); } catch {}   // igual que la barra
   dockPanelWin.loadFile(path.join(__dirname, 'src', 'dock-panel.html'));
@@ -1936,6 +1940,8 @@ function showDockPanel() {
   const wasVisible = dockPanelWin.isVisible();
   // La ventana se coloca YA en su sitio: la sensación de aparecer la da el desvanecido.
   // Antes se desplazaba fotograma a fotograma y por eso iba a tirones.
+  // Oculto está frenado y puede llevar un fotograma viejo: el estado al día antes de verse.
+  if (!wasVisible) sendStateToWindow(dockPanelWin);
   try {
     dockPanelWin.setBounds(target);
     if (!wasVisible) dockPanelWin.setOpacity(0);
