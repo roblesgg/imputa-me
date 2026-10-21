@@ -454,12 +454,17 @@ function getActiveTask() {
 // en marcha esto se llamaba dos veces por segundo y cada vez se creaba y tiraba un
 // menú nativo entero. Ahora se monta al hacer clic derecho (ver whenReady), con los
 // tiempos al día.
-let lastTrayTip = null;
+// Una vez por minuto se reescribe aunque no cambie: si el Explorador se reinicia, Windows
+// recrea el icono sin tooltip.
+let lastTrayTip = null, lastTrayTipAt = 0;
 function updateTrayTitle() {
   if (!tray) return;
   const active = getActiveTask();
   const tip = `imputa.me · ${formatDuration(totalTodaySeconds())}${active ? ' · ' + active.name : ''}`;
-  if (tip !== lastTrayTip) { lastTrayTip = tip; tray.setToolTip(tip); }
+  const now = Date.now();
+  if (tip !== lastTrayTip || now - lastTrayTipAt > 60000) {
+    lastTrayTip = tip; lastTrayTipAt = now; tray.setToolTip(tip);
+  }
 }
 
 function buildTrayMenu() {
@@ -1618,9 +1623,16 @@ function makeWindow(file, w, h, opts = {}) {
 
 function createWidgetWindow() {
   const work = getReferenceDisplay().workArea;
-  const W = 320, H = 172;
+  // Si el usuario lo movió o lo redimensionó, vuelve donde lo dejó (como cuando solo se
+  // escondía), siempre que esa posición siga dentro de alguna pantalla.
+  const wb = widgetBounds;
+  const ok = !!wb && screen.getAllDisplays().some(d => {
+    const a = d.workArea;
+    return wb.x >= a.x && wb.y >= a.y && wb.x < a.x + a.width && wb.y < a.y + a.height;
+  });
+  const W = ok ? wb.width : 320, H = ok ? wb.height : 172;
   const w = widgetWin = makeWindow('widget.html', W, H, {
-    x: work.x + work.width - W - 20, y: work.y + work.height - H - 20,
+    x: ok ? wb.x : work.x + work.width - W - 20, y: ok ? wb.y : work.y + work.height - H - 20,
     alwaysOnTop: true, skipTaskbar: true,
     show: false,          // no mostrar al crear: mostramos sin activar (ver showInactive)
     minWidth: 280, minHeight: 140,
@@ -1639,9 +1651,16 @@ function createWidgetWindow() {
 // El recordatorio se ve unos segundos cada X minutos: se destruye al retirarlo en vez
 // de esconderlo. Escondido seguía vivo todo el día (un proceso de ~115 MB recibiendo
 // el estado cada segundo); recrearlo cuesta menos de un segundo de CPU por aviso.
+// Su posición y tamaño se guardan en memoria para recrearlo en el mismo sitio.
+let widgetBounds = null;
 function hideWidget() {
   if (widgetHideTimer) { clearTimeout(widgetHideTimer); widgetHideTimer = null; }
-  try { if (widgetWin && !widgetWin.isDestroyed()) widgetWin.destroy(); } catch {}
+  try {
+    if (widgetWin && !widgetWin.isDestroyed()) {
+      if (widgetWin.isVisible()) widgetBounds = widgetWin.getBounds();
+      widgetWin.destroy();
+    }
+  } catch {}
   widgetWin = null;
 }
 
@@ -2187,8 +2206,8 @@ function dockNavigate(view) {
 // Aplica el modo dock al cambiarlo en Ajustes (o al arrancar). wasDock = estado anterior.
 function applyDockMode(wasDock) {
   if (settings.dockMode) {
-    // Al entrar en modo dock, cerramos las ventanas sueltas y creamos la barra.
-    [mainWin, calendarWin, groupsWin, settingsWin].forEach(w => { try { if (w && !w.isDestroyed()) w.close(); } catch {} });   // cerrar, no esconder: en modo dock no se vuelven a usar
+    // Al entrar en modo dock, escondemos las ventanas sueltas y creamos la barra.
+    [mainWin, calendarWin, groupsWin, settingsWin].forEach(w => { try { if (w && !w.isDestroyed()) w.hide(); } catch {} });   // escondidas (no cerradas) para que, al salir del dock, vuelvan con su tamaño y sitio; con el frenado por defecto no pintan
     createDock();
     if (!wasDock) dockNavigate('panel');
     else positionDock();   // reajusta a la pantalla elegida
@@ -2774,7 +2793,7 @@ ipcMain.on('action', (event, { type, payload }) => {
       settings.dockMode = !!(payload && payload.enabled);
       saveSettings();
       if (settings.dockMode) {
-        [mainWin, calendarWin, groupsWin, settingsWin].forEach(w => { try { if (w && !w.isDestroyed()) w.close(); } catch {} });
+        [mainWin, calendarWin, groupsWin, settingsWin].forEach(w => { try { if (w && !w.isDestroyed()) w.hide(); } catch {} });
         createDock();
         if (!wasDock) dockNavigate('settings'); else positionDock();
       } else if (wasDock) {

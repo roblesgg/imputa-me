@@ -973,7 +973,11 @@ function render(state) {
   // con secciones, se reconstruía SIEMPRE, y con un estado por segundo la lista se
   // rehacía (y volvía a animar su entrada) sin parar, perdiendo lo que se estuviera
   // escribiendo en una subtarea.
-  const flatIds = restantes.map(t => t.id + ':' + taskTypeOf(t)).join(',') + '|' + panelFilter + (showSections ? '|sec' : '');
+  // También el nombre y las subtareas (id y nombre): updateRowContent solo refresca
+  // tiempos y estado, y las clausuras de buildRow/buildSubtasks guardan esos datos. Sin
+  // tiempos en la clave, el estado de cada segundo no reconstruye nada.
+  const firma = t => t.id + ':' + taskTypeOf(t) + ':' + t.name + ':' + (t.subtasks || []).map(s => s.id + '=' + s.name).join(';');
+  const flatIds = restantes.map(firma).join(',') + '|' + panelFilter + (showSections ? '|sec' : '');
   const sameSet = lastRenderedIds === flatIds;
   if (sameSet) {
     restantes.forEach(t => {
