@@ -317,7 +317,10 @@
   .tb-handle:active { cursor:grabbing; }
   .tb-handle.resizing { opacity:1;cursor:grabbing; }
 
-  .tb-handle.running::after { background:var(--danger); animation:tbHandlePulse 1.6s ease-in-out infinite; }
+  .tb-handle.running::after { background:var(--danger); }
+  /* El tirador está a opacity:0 salvo con el ratón encima: animarlo siempre era repintar
+     algo que no se ve. */
+  .task-block:hover .tb-handle.running::after, .tb-handle.running.resizing::after { animation:tbHandlePulse 1.6s ease-in-out infinite; }
   @keyframes tbHandlePulse {
     0%,100% { box-shadow:0 0 0 0 rgba(248,113,113,.5); }
     70% { box-shadow:0 0 0 6px rgba(248,113,113,0); }

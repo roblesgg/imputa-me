@@ -13,7 +13,7 @@
   .label { font-size:var(--font-xs);font-weight:var(--fw-bold);color:var(--text2);letter-spacing:.07em;text-transform:uppercase; }
 
   .task-row { display:flex;align-items:center;gap:10px; }
-  .pulse-dot { width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(52,211,153,.5);animation:pulse 1.6s ease-in-out infinite;flex-shrink:0; }
+  .pulse-dot { width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(52,211,153,.5);animation:pulse 1.6s ease-in-out 3;flex-shrink:0; }
   @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)} 70%{box-shadow:0 0 0 7px rgba(52,211,153,0)} 100%{box-shadow:0 0 0 0 rgba(52,211,153,0)} }
   .task-label { font-size:var(--font-lg);font-weight:var(--fw-semibold);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
   .task-meta { display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px; }

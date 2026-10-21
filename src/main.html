@@ -70,7 +70,7 @@
   .hero-dot {
     width:11px;height:11px;border-radius:50%;flex-shrink:0;cursor:pointer;
     box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
-    animation:latido 2.2s ease-in-out infinite;
+    animation:latido 2.2s ease-in-out 3;   /* 3 latidos al arrancar: infinito repintaba la sombra 60 veces por segundo todo el día */
   }
   @keyframes latido {
     0%,100% { box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
@@ -246,7 +246,7 @@
     display:none;align-items:center;justify-content:center;gap:8px;width:100%;
     background:var(--danger);color:#1a1a24;font-size:13px;font-weight:700;padding:11px 12px;
     border-radius:var(--radius-sm);cursor:pointer;-webkit-app-region:no-drag;border:none;
-    animation:updatePulse 2s ease-in-out infinite;
+    animation:updatePulse 2s ease-in-out 3;
   }
   .update-bar:hover { background:color-mix(in srgb, var(--danger) 82%, #000);color:#fff; }
   @keyframes updatePulse { 0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--danger) 55%, transparent)} 70%{box-shadow:0 0 0 7px transparent} }
