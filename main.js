@@ -431,11 +431,16 @@ function getActiveTask() {
 }
 
 // ── Tray ─────────────────────────────────────────────────────────────────────
+// Solo el tooltip, y solo si cambia. El menú ya no se reconstruye aquí: con una tarea
+// en marcha esto se llamaba dos veces por segundo y cada vez se creaba y tiraba un
+// menú nativo entero. Ahora se monta al hacer clic derecho (ver whenReady), con los
+// tiempos al día.
+let lastTrayTip = null;
 function updateTrayTitle() {
   if (!tray) return;
   const active = getActiveTask();
-  tray.setToolTip(`imputa.me · ${formatDuration(totalTodaySeconds())}${active ? ' · ' + active.name : ''}`);
-  tray.setContextMenu(buildTrayMenu());
+  const tip = `imputa.me · ${formatDuration(totalTodaySeconds())}${active ? ' · ' + active.name : ''}`;
+  if (tip !== lastTrayTip) { lastTrayTip = tip; tray.setToolTip(tip); }
 }
 
 function buildTrayMenu() {
@@ -2389,9 +2394,14 @@ function sendStateToWindow(win) {
 
 function broadcastState() {
   updateTrayTitle();
-  // dockWin comparte webContents con sus iframes: enviarle el estado llega a la vista
-  // embebida (panel/calendario/guardadas) que tenga cargada en ese momento.
-  [widgetWin, mainWin, calendarWin, groupsWin, dockWin, dockPanelWin].forEach(w => sendStateToWindow(w));
+  // Se calcula una sola vez (antes, una por ventana, cada segundo).
+  const s = getSerializableState();
+  [widgetWin, mainWin, calendarWin, groupsWin].forEach(w => sendToAllFrames(w, 'state', s));
+  // El panel del dock lo escucha su iframe (panel/calendario/guardadas), no la página
+  // que lo envuelve. La barrita (dockWin) no escucha 'state' y ya no se le manda.
+  if (dockPanelWin && !dockPanelWin.isDestroyed()) {
+    try { (dockPanelWin.webContents.mainFrame.frames || []).forEach(f => { try { f.send('state', s); } catch {} }); } catch {}
+  }
 }
 
 ipcMain.on('action', (event, { type, payload }) => {
@@ -2566,12 +2576,14 @@ ipcMain.on('action', (event, { type, payload }) => {
     }
     case 'set-bg-opacity':
       settings.bgOpacity = Math.max(0, Math.min(100, Number(payload.value)));
-      saveSettings(); applyTranslucencyAll();
+      saveSettingsSoon(); applyTranslucencyAll();   // llega en cada 'input' del deslizador
       break;
     case 'mark-tutorial-seen': {
       const ids = Array.isArray(payload && payload.ids) ? payload.ids : [];
       const seen = new Set(settings.tutorialSeenSteps || []);
+      const antes = seen.size;
       ids.forEach(id => seen.add(id));
+      if (seen.size === antes) break;   // nada nuevo: ni guardar ni difundir
       settings.tutorialSeenSteps = [...seen];
       saveSettings(); broadcastState();
       break;
@@ -2959,8 +2971,9 @@ ipcMain.handle('sync-status', async () => syncStatus);
 
 function startTick() {
   tickTimer = setInterval(() => {
-    updateTrayTitle();
+    // broadcastState ya actualiza la bandeja: llamarla también aquí era hacerlo doble.
     if (state.activeTaskId) broadcastState();
+    else updateTrayTitle();
   }, 1000);
 }
 
@@ -3088,12 +3101,12 @@ app.whenReady().then(() => {
     saveRaw: saveDataRaw,
     onChange: () => { saveDataRaw(); broadcastState(); },
     onStatus: (s) => {
-      syncStatus = s;
-      if (tray) tray.setContextMenu(buildTrayMenu());
+      syncStatus = s;   // el menú de la bandeja lo lee al abrirse
       if (syncWin && !syncWin.isDestroyed()) syncWin.webContents.send('sync-status', s);
-      // Ajustes puede estar como ventana o embebido en el dock (iframe): a los dos.
+      // Ajustes puede estar como ventana o embebido en el panel del dock (iframe): a los
+      // dos. Se mandaba a dockWin, la barrita, que no tiene Ajustes dentro.
       sendToAllFrames(settingsWin, 'sync-status', s);
-      sendToAllFrames(dockWin, 'sync-status', s);
+      sendToAllFrames(dockPanelWin, 'sync-status', s);
     },
   }).catch(() => {});
 
@@ -3101,7 +3114,8 @@ app.whenReady().then(() => {
 
   tray = new Tray(trayIcon);
   tray.setToolTip('imputa.me');
-  tray.setContextMenu(buildTrayMenu());
+  // El menú se monta al abrirlo, no cada segundo (ver updateTrayTitle).
+  tray.on('right-click', () => { try { tray.popUpContextMenu(buildTrayMenu()); } catch {} });
   tray.on('click', () => openLastView());
 
   // Conectar/desconectar monitores o cambiar su resolución deja las medidas viejas.
@@ -3122,8 +3136,7 @@ app.whenReady().then(() => {
     // dockIsHidden() caduca el escondite solo, y ensureDockBarVisible la devuelve
     // (y le reafirma el nivel, por si algo a pantalla completa se puso delante).
     if (dockIsHidden()) return;
-    ensureDockBarVisible();
-    syncDockBounds();
+    ensureDockBarVisible();   // ya hace syncDockBounds
   }, 3000);
 
   startTick();
