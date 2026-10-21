@@ -17,6 +17,9 @@ app.on('second-instance', () => {
 });
 
 const APP_ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
+// Para las ventanas, el .ico (16-256 px): el PNG es de 2000×2000 y se decodificaba
+// entero (~16 MB) cada vez que se creaba una ventana, como el recordatorio.
+const WINDOW_ICON_PATH = path.join(__dirname, 'assets', 'icon.ico');
 const TASK_COLORS = ['#6366f1','#f472b6','#34d399','#fbbf24','#60a5fa','#f87171','#a78bfa','#2dd4bf'];
 // ── Temas de color ───────────────────────────────────────────────────────────
 // Cada tema define la paleta completa. Se envía a TODAS las ventanas (y a los iframes
@@ -938,7 +941,7 @@ function setDnd(minutos) {
   if (dndActive()) {
     // Lo que ya estuviera asomando se retira en el acto.
     hideEyeCare();
-    try { if (widgetWin && !widgetWin.isDestroyed()) widgetWin.hide(); } catch {}
+    hideWidget();
   }
   broadcastState(); updateTrayTitle();
 }
@@ -1406,9 +1409,7 @@ function scheduleWidgetAutoHide() {
   widgetHideTimer = null;
   if (!settings.widgetAutoHide) return;
   const ms = (settings.widgetAutoHideSeconds || 10) * 1000;
-  widgetHideTimer = setTimeout(() => {
-    if (widgetWin && !widgetWin.isDestroyed()) widgetWin.hide();
-  }, ms);
+  widgetHideTimer = setTimeout(() => { widgetHideTimer = null; hideWidget(); }, ms);
 }
 
 // El blur (acrílico) está SIEMPRE puesto. El deslizador controla la opacidad del
@@ -1575,7 +1576,7 @@ function makeWindow(file, w, h, opts = {}) {
     backgroundColor: '#00000000',
     backgroundMaterial: settings.blurEnabled === false ? 'none' : 'acrylic',
     resizable: true, roundedCorners: true,
-    icon: APP_ICON_PATH,
+    icon: WINDOW_ICON_PATH,
     ...restOpts,
     // Con el frenado de Chromium por defecto: una ventana visible sin foco sigue animando
     // igual; solo deja de pintar la que está oculta, minimizada o tapada del todo. Con
@@ -1594,7 +1595,7 @@ function makeWindow(file, w, h, opts = {}) {
 function createWidgetWindow() {
   const work = getReferenceDisplay().workArea;
   const W = 320, H = 172;
-  widgetWin = makeWindow('widget.html', W, H, {
+  const w = widgetWin = makeWindow('widget.html', W, H, {
     x: work.x + work.width - W - 20, y: work.y + work.height - H - 20,
     alwaysOnTop: true, skipTaskbar: true,
     show: false,          // no mostrar al crear: mostramos sin activar (ver showInactive)
@@ -1603,7 +1604,21 @@ function createWidgetWindow() {
   });
   // showInactive: aparece encima pero SIN robar el foco, para no sacarte de lo que
   // estuvieras escribiendo en otra aplicación.
-  widgetWin.once('ready-to-show', () => { widgetWin.showInactive(); sendStateToWindow(widgetWin); scheduleWidgetAutoHide(); });
+  w.once('ready-to-show', () => {
+    if (w.isDestroyed()) return;   // se retiró (No molestar, cerrar) antes de cargar
+    w.showInactive(); sendStateToWindow(w); scheduleWidgetAutoHide();
+  });
+  // Se compara la instancia: si ya se creó otro recordatorio, no hay que perderlo.
+  w.on('closed', () => { if (widgetWin === w) widgetWin = null; });
+}
+
+// El recordatorio se ve unos segundos cada X minutos: se destruye al retirarlo en vez
+// de esconderlo. Escondido seguía vivo todo el día (un proceso de ~115 MB recibiendo
+// el estado cada segundo); recrearlo cuesta menos de un segundo de CPU por aviso.
+function hideWidget() {
+  if (widgetHideTimer) { clearTimeout(widgetHideTimer); widgetHideTimer = null; }
+  try { if (widgetWin && !widgetWin.isDestroyed()) widgetWin.destroy(); } catch {}
+  widgetWin = null;
 }
 
 // ── Modo dock (barra flotante lateral) ────────────────────────────────────────
@@ -1701,7 +1716,7 @@ function createDockPanel() {
     transparent: false, backgroundColor: '#00000000',
     backgroundMaterial: settings.blurEnabled === false ? 'none' : 'acrylic',
     resizable: false, movable: false, skipTaskbar: true, alwaysOnTop: true, roundedCorners: true,
-    icon: APP_ICON_PATH,
+    icon: WINDOW_ICON_PATH,
     // Sin backgroundThrottling:false: plegado está oculto y no debe pintar (ver makeWindow).
     webPreferences: { nodeIntegration: true, contextIsolation: false, nodeIntegrationInSubFrames: true },
   });
@@ -2048,7 +2063,7 @@ function createDock() {
     frame: false, transparent: true, hasShadow: false, backgroundColor: '#00000000',
     resizable: false, movable: false, skipTaskbar: true, alwaysOnTop: true,
     roundedCorners: false, focusable: true,
-    icon: APP_ICON_PATH,
+    icon: WINDOW_ICON_PATH,
     webPreferences: { nodeIntegration: true, contextIsolation: false, nodeIntegrationInSubFrames: true , backgroundThrottling: false},
   });
   dockExpanded = false;
@@ -2148,8 +2163,8 @@ function dockNavigate(view) {
 // Aplica el modo dock al cambiarlo en Ajustes (o al arrancar). wasDock = estado anterior.
 function applyDockMode(wasDock) {
   if (settings.dockMode) {
-    // Al entrar en modo dock, escondemos las ventanas sueltas y creamos la barra.
-    [mainWin, calendarWin, groupsWin, settingsWin].forEach(w => { try { if (w && !w.isDestroyed()) w.hide(); } catch {} });
+    // Al entrar en modo dock, cerramos las ventanas sueltas y creamos la barra.
+    [mainWin, calendarWin, groupsWin, settingsWin].forEach(w => { try { if (w && !w.isDestroyed()) w.close(); } catch {} });   // cerrar, no esconder: en modo dock no se vuelven a usar
     createDock();
     if (!wasDock) dockNavigate('panel');
     else positionDock();   // reajusta a la pantalla elegida
@@ -2181,7 +2196,7 @@ function createSplash() {
     frame: false, transparent: true, hasShadow: false, backgroundColor: '#00000000',
     resizable: false, movable: false, alwaysOnTop: true, skipTaskbar: true,
     show: false,
-    icon: APP_ICON_PATH,
+    icon: WINDOW_ICON_PATH,
     webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
   splashWin.loadFile(path.join(__dirname, 'src', 'splash.html'));
@@ -2591,10 +2606,7 @@ ipcMain.on('action', (event, { type, payload }) => {
     case 'open-calendar': openCalendar(); break;
     case 'open-settings': openSettings(); break;
     case 'open-groups':   openGroups(); break;
-    case 'close-widget':
-      if (widgetHideTimer) { clearTimeout(widgetHideTimer); widgetHideTimer = null; }
-      if (widgetWin && !widgetWin.isDestroyed()) widgetWin.hide();
-      break;
+    case 'close-widget':  hideWidget(); break;
     case 'close-main':
       if (settings.dockMode && dockWin && !dockWin.isDestroyed()) dockWin.webContents.send('dock-collapse');
       else if (mainWin && !mainWin.isDestroyed()) mainWin.hide();
@@ -2731,7 +2743,7 @@ ipcMain.on('action', (event, { type, payload }) => {
       settings.dockMode = !!(payload && payload.enabled);
       saveSettings();
       if (settings.dockMode) {
-        [mainWin, calendarWin, groupsWin, settingsWin].forEach(w => { try { if (w && !w.isDestroyed()) w.hide(); } catch {} });
+        [mainWin, calendarWin, groupsWin, settingsWin].forEach(w => { try { if (w && !w.isDestroyed()) w.close(); } catch {} });
         createDock();
         if (!wasDock) dockNavigate('settings'); else positionDock();
       } else if (wasDock) {
@@ -2785,7 +2797,7 @@ ipcMain.on('action', (event, { type, payload }) => {
       else { if (groupsWin && !groupsWin.isDestroyed()) groupsWin.hide(); ensureSomeWindowVisible(); }
       break;
     case 'open-sync':     openSync(); break;
-    case 'close-sync':    if (syncWin && !syncWin.isDestroyed()) syncWin.hide(); break;
+    case 'close-sync':    if (syncWin && !syncWin.isDestroyed()) syncWin.close(); break;   // se recrea al abrirla (openSync)
     case 'open-update-window': openUpdateWindow(); break;   // desde el botón rojo del panel
     case 'update-download': if (autoUpdater) autoUpdater.downloadUpdate(); break;
     case 'update-install':  installUpdateNow(); break;
