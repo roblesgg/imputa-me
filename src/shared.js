@@ -71,7 +71,13 @@ function applyThemeVars(t) {
 // mientras el panel siga plegado; sin esto el tutorial arrancaría a escondidas y daría
 // sus pasos por vistos sin que nadie los llegue a ver.
 function isViewVisibleToUser() {
-  return !IS_EMBEDDED || window.__dockExpanded === true;
+  if (!IS_EMBEDDED) return true;
+  if (window.__dockExpanded !== true) return false;
+  // 2.8: el panel carga todas sus pestañas a la vez y esconde las que no se ven. Una
+  // escondida no está "a la vista" aunque el panel esté abierto: si no, el recorrido se
+  // enseñaba en ella, nadie lo veía, y sus pasos se daban por vistos.
+  try { const f = window.frameElement; if (f && !f.classList.contains('on')) return false; } catch {}
+  return true;
 }
 
 // Blanco o negro según la luminosidad del color de fondo, para que el texto
@@ -141,11 +147,18 @@ const TUTORIAL_STEPS = [
     title:'Añadir tarea', text:'Crea una tarea nueva. En cuanto le des a play, empieza a contar el tiempo.' },
 
   { id:'cal-grid',       window:'calendar', version:'1.2.19', selector:'#gridScroll',
-    title:'La cuadrícula', text:'Arrastra sobre un hueco libre para crear una entrada a mano. Haz clic en un bloque para editarlo (su nombre y nota, solo de esa entrada) y, si está en marcha o ya ha terminado, para pausarla, reanudarla o reiniciarla con otra nota.' },
-  { id:'cal-menu',       window:'calendar', version:'2.4.6', selector:'#gridScroll',
-    title:'Clic derecho en un bloque', text:'Desde aquí guardas la tarea en una sección (o la mueves a otra) sin pasar por el panel, la pausas o la reanudas, y editas o eliminas ese rato concreto.' },
+    title:'La cuadrícula', text:'Arrastra sobre un hueco libre para crear una entrada a mano. Doble clic en un bloque abre sus detalles (su nombre y nota, solo de esa entrada) y, si está en marcha o ya ha terminado, puedes pausarla, reanudarla o reiniciarla con otra nota.' },
   { id:'cal-subtarea',   window:'calendar', version:'2.4.1', selector:'#gridScroll',
-    title:'La subtarea de cada rato', text:'Al hacer clic en un bloque puedes elegir a qué subtarea fue ese rato, y crear, renombrar o borrar subtareas ahí mismo. Como el nombre y la nota, el cambio es solo de esa entrada.' },
+    title:'La subtarea de cada rato', text:'En los detalles de un bloque (doble clic) o desde el menú circular eliges a qué subtarea fue ese rato, y puedes crear subtareas ahí mismo. Como el nombre y la nota, el cambio es solo de esa entrada.' },
+  // 2.8
+  { id:'cal-clic-28',    window:'calendar', version:'2.8.0', selector:'#gridScroll',
+    title:'Un clic selecciona', text:'Ahora un clic solo selecciona el rato (se marca con un contorno); doble clic o Intro abre sus detalles en un bocadillo junto al bloque. Con uno seleccionado: Ctrl+C lo copia, Ctrl+D lo duplica justo detrás y Supr lo borra (te pregunta antes). Al alargarlo o acortarlo por sus asas va de 5 en 5 minutos.' },
+  { id:'cal-pegar-28',   window:'calendar', version:'2.8.0', selector:'#gridScroll',
+    title:'Pegar donde quieras', text:'Copia un rato, haz clic en un hueco de cualquier día y verás ahí dónde va a quedar, con su color y lo que dura. Ctrl+V lo pega; si no cabe entero, se ajusta al hueco libre. Varios Ctrl+V seguidos se van colocando uno detrás de otro.' },
+  { id:'cal-rueda-28',   window:'calendar', version:'2.8.0', selector:'#gridScroll',
+    title:'Menú circular', text:'Clic derecho sobre un rato: detalles, pausar o seguir desde ahora, alargarlo hasta ahora, copiar, duplicar, su subtarea, su nota y eliminar. No hace falta acertar en el botón: basta con mover el ratón hacia la opción. En un hueco vacío: entrada nueva, pegar o empezar una tarea.' },
+  { id:'cal-horas-28',   window:'calendar', version:'2.8.0', selector:'#weekHeader .dh-total',
+    title:'Las horas de cada día', text:'Debajo de cada día tienes lo que llevas. Un clic aquí (o en cualquier total de la izquierda) las pasa a decimales para imputar, y otro las devuelve a horas y minutos.' },
   { id:'cal-dias',       window:'calendar', version:'2.4.11', selector:'#weekDaysBtn',
     title:'Los días que trabajas', text:'Quita el sábado y el domingo si no los trabajas y las columnas se reparten el hueco. Lo que elijas aquí vale solo para la semana que estés viendo: para cambiarlo siempre, en Ajustes → Calendario.' },
   { id:'cal-day',        window:'calendar', version:'1.2.19', selector:'#weekHeader',
@@ -179,9 +192,13 @@ const TUTORIAL_STEPS = [
     title:'Retomar una tarea', text:'Haz clic en una tarea guardada para devolverla al Panel y seguir contando donde la dejaste.' },
   { id:'grp-trash',      window:'groups', version:'2.2.2', selector:'.trash-card',
     title:'La papelera', text:'Lo que borras se queda aquí 30 días antes de irse del todo, por si te arrepientes. Su historial del calendario no se toca nunca.' },
+  { id:'grp-paleta-28',  window:'groups', version:'2.8.0', selector:'#groupsList .group-header:has(.group-pal)',
+    title:'Colores por sección', text:'Al pasar por la cabecera de una sección sale el botón de paleta: elige unos tonos (azules, verdes, naranjas…) y cada tarea nueva de esa sección cogerá uno al azar. Con "Repintar" se los das también a las que ya tiene.' },
 
-  { id:'set-theme',      window:'settings', version:'2.2.2', selector:'#themeGrid',
-    title:'Temas y color', text:'Ocho paletas, clara incluida. Y justo debajo eliges el color de los botones por separado del fondo.' },
+  { id:'set-tema-28',    window:'settings', version:'2.8.0', selector:'#themeGrid',
+    title:'Noche cálida y Luz', text:'Los dos temas del rediseño van primero: Noche cálida, el oscuro, que es el de por defecto, y Luz, el claro; los de antes siguen en la lista. Y justo debajo eliges el color de los botones por separado del fondo.' },
+  { id:'set-cristal-28', window:'settings', version:'2.8.0', selector:'.row:has(#liquidGlass)',
+    title:'Cristal líquido', text:'Los bocadillos y el menú circular doblan lo que hay detrás, como un cristal. Si lo prefieres esmerilado, se apaga aquí.' },
   { id:'set-dock',       window:'settings', version:'2.2.2', selector:'.row:has(#dockMode)',
     title:'La barra flotante', text:'Es el modo por defecto: una barra discreta en el borde. Aquí ajustas su borde, color, largo, grosor, transparencia, monitor y cuándo se cierra sola.' },
   { id:'set-beta',       window:'settings', version:'2.2.2', selector:'.row:has(#betaUpdates)',

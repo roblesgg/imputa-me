@@ -256,6 +256,7 @@ function meter(view, dir, modo) {
   if (modo === 'seco') {
     f.classList.add('on');
     f._fin = setTimeout(() => f.classList.remove('sin-anim'), 60);
+    avisarVista(f);
     return;
   }
   // La vista se deja maquetada y pintada (aún transparente, en su punto de partida) dos
@@ -269,7 +270,14 @@ function meter(view, dir, modo) {
     f.classList.remove('sin-anim', 'enfoque', 'preparada');
     f.classList.add('on', 'animando');
     f._fin = setTimeout(() => f.classList.remove('animando'), 700);
+    avisarVista(f);
   }));
+}
+
+// La vista que acaba de quedar a la vista lo sabe (su recorrido guiado, si tiene pasos
+// pendientes, arranca entonces y no mientras estaba escondida).
+function avisarVista(f) {
+  setTimeout(() => { try { f.contentWindow.dispatchEvent(new Event('dock-expanded')); } catch {} }, 450);
 }
 
 // ---- Cambio de ancho (el calendario es más ancho) ----

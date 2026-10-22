@@ -139,6 +139,8 @@ const NOVEDADES_2_5 = {
 const NOVEDADES_2_8 = {
   title: 'Novedades de imputa.me 2.8',
   steps: [
+    { icon:'guide', title:'Te lo enseño en su sitio',
+      text:'Cuando acabes de leer esto, el recorrido te lleva por el calendario, Tareas y Ajustes señalando cada cosa nueva donde está. Solo verás lo que no hayas visto ya.' },
     { icon:'spark', title:'Cara nueva',
       text:'Toda la app rediseñada con estilo Mac: el tema Noche cálida (y Luz, el claro), letra nueva, cápsulas en vez de cajas y animaciones con muelle. Al cambiar de pestaña ya no quedan trozos en blanco.' },
     { icon:'calendar', title:'El calendario, a mano',
@@ -155,6 +157,7 @@ const NOVEDADES_2_8 = {
 const WHATS_NEW = {
   '2.8.0': NOVEDADES_2_8,
   '2.8.1': NOVEDADES_2_8,
+  '2.8.2': NOVEDADES_2_8,
   '2.2.0': NOVEDADES_2_2,
   '2.2.1': NOVEDADES_2_2,
   '2.3.0': NOVEDADES_2_3,
