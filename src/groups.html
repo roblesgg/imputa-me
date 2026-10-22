@@ -236,6 +236,8 @@
   .confirm-popup { width:320px;z-index:52; }
   .confirm-popup-text { font-size:13px;color:var(--text2);line-height:1.45;white-space:pre-line; }
 </style>
+<!-- 2.8: estilo «Suave» (rediseño Mac). Va el último para mandar sobre lo de arriba. -->
+<link rel="stylesheet" href="mac.css">
 </head>
 <body>
 <div class="app animate-in">
@@ -416,6 +418,30 @@
     </div>
   </div>
 
+  <!-- 2.8: colores de una sección (su paleta). Bocadillo anclado al botón de la cabecera. -->
+  <div class="popup-backdrop pal-backdrop" id="palBackdrop" style="display:none" onclick="cerrarPaletas()"></div>
+  <div class="entry-popup pal-pop" id="palPop" style="display:none">
+    <div class="pop-body">
+      <div class="pop-head">
+        <span class="pop-dot" id="palDot"></span>
+        <div class="pop-head-main">
+          <div class="entry-popup-title">Colores de la sección</div>
+          <div class="pop-meta" id="palSecName"></div>
+        </div>
+        <button class="pop-close" type="button" onclick="cerrarPaletas()" title="Cerrar (Esc)">
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="pal-hint">Cada tarea nueva de esta sección coge un tono al azar de su paleta: se distinguen entre ellas y se reconoce de quién son de un vistazo.</div>
+      <div class="pal-list" id="palList"></div>
+      <div class="entry-popup-actions">
+        <button class="btn-ghost" id="palRepintar" onclick="repintarSeccion()">Repintar sus tareas</button>
+        <div style="flex:1"></div>
+        <button class="btn-primary" onclick="cerrarPaletas()">Hecho</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Popup de confirmación con el estilo de la app (sustituye a confirm() nativo) -->
   <div class="popup-backdrop confirm-backdrop" id="confirmPopupBackdrop" style="display:none" onclick="closeConfirmPopup()"></div>
   <div class="entry-popup confirm-popup" id="confirmPopup" style="display:none">
@@ -430,6 +456,8 @@
 </div>
 
 <script src="shared.js"></script>
+<script src="glass.js"></script>
+<script src="bocadillo.js"></script>
 <script>
 const { ipcRenderer } = require('electron');
 let currentState = null;
@@ -471,7 +499,12 @@ function fmt(secs) {
   return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
 }
 
-ipcRenderer.on('state', (_, state) => { currentState = state; renderGroups(); maybeStartTutorial(); });
+ipcRenderer.on('state', (_, state) => {
+  currentState = state;
+  renderGroups();
+  if (palGrupoId) pintarPaletas();
+  maybeStartTutorial();
+});
 ipcRenderer.send('action', { type: 'get-state' });
 
 // Ver comentario en main.html: embebido, se espera a que el panel esté desplegado.
@@ -643,7 +676,7 @@ function dropGroupOn(targetId, above) {
 // estructura: esos se refrescan aparte.
 function firmaGroups() {
   if (!currentState) return '';
-  const secciones = (currentState.groups || []).map(g => g.id + ':' + g.name).join('|');
+  const secciones = (currentState.groups || []).map(g => g.id + ':' + g.name + ':' + (g.palette || '')).join('|');
   const tareas = currentState.tasks
     .filter(t => !t.deleted)
     .map(t => [t.id, t.name, t.color, t.groupId, t.archived ? 1 : 0, t.inactive ? 1 : 0,
@@ -703,7 +736,7 @@ function renderGroups(forzar) {
 
   // No es una sección de verdad: ni se renombra ni se borra.
   const secciones = [{ id: PANEL_SEC, name: 'Sin sección', tasks: sinSeccion, virtual: true }]
-    .concat(groups.map(g => ({ id: g.id, name: g.name, tasks: vivas.filter(t => t.groupId === g.id) })));
+    .concat(groups.map(g => ({ id: g.id, name: g.name, palette: g.palette, tasks: vivas.filter(t => t.groupId === g.id) })));
 
   let anyVisible = false;
   secciones.forEach(g => {
@@ -727,6 +760,7 @@ function renderGroups(forzar) {
       <svg class="group-grip" width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2.5" cy="2.5" r="1.3"/><circle cx="7.5" cy="2.5" r="1.3"/><circle cx="2.5" cy="7" r="1.3"/><circle cx="7.5" cy="7" r="1.3"/><circle cx="2.5" cy="11.5" r="1.3"/><circle cx="7.5" cy="11.5" r="1.3"/></svg>
       <svg class="group-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 1l4 4-4 4"/></svg>
       <span class="group-name">${g.name}</span>
+      ${g.virtual ? '' : botonPaleta(g)}
       <span class="group-count">${tasksInGroup.length}</span>
       <button class="group-tree-btn" title="Abrir o cerrar las subtareas de esta sección">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>
@@ -742,6 +776,8 @@ function renderGroups(forzar) {
       if (collapsedGroups.has(g.id)) collapsedGroups.delete(g.id); else collapsedGroups.add(g.id);
       renderGroups();
     };
+    const btnPal = header.querySelector('.group-pal');
+    if (btnPal) btnPal.onclick = (e) => { e.stopPropagation(); abrirPaletas(g.id, btnPal); };
     // Renombrar es cosa del lápiz: el doble clic era un gesto que no se veía por ningún lado.
     const btnEdit = header.querySelector('.group-edit');
     if (btnEdit) btnEdit.onclick = (e) => { e.stopPropagation(); openSectionPopup('rename', g.id, g.name); };
@@ -1283,6 +1319,83 @@ function confirmTaskRename() {
   }
   closeTaskRenamePopup();
 }
+
+// ---------- Colores de una sección (2.8) ----------
+// Cada sección puede tener una paleta: las tareas nuevas que se crean en ella cogen un tono
+// al azar de esa paleta (lo decide main.js), así las de un mismo cliente se reconocen en el
+// calendario sin ser todas iguales.
+const ICONO_PALETA = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.1 0 1.7-.9 1.4-1.9-.3-1.1.4-2.1 1.6-2.1h1.8a3.7 3.7 0 0 0 3.7-3.7C20.5 7.6 16.7 3.5 12 3.5z"/><circle cx="7.6" cy="11.5" r="1.1" fill="currentColor"/><circle cx="10.5" cy="7.6" r="1.1" fill="currentColor"/><circle cx="15.2" cy="8.4" r="1.1" fill="currentColor"/></svg>';
+const ICONO_CHECK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>';
+
+function paletaDe(g) {
+  return g && g.palette && currentState && currentState.palettes ? currentState.palettes[g.palette] || null : null;
+}
+
+// En la cabecera: los tres primeros tonos de su paleta, o el icono de paleta si no tiene.
+function botonPaleta(g) {
+  const pal = paletaDe(g);
+  const dentro = pal ? pal.colors.slice(0, 3).map(c => `<i style="background:${c}"></i>`).join('') : ICONO_PALETA;
+  return `<button class="group-pal${pal ? ' con' : ''}" title="${pal ? 'Paleta: ' + pal.name : 'Ponerle colores a la sección'}">${dentro}</button>`;
+}
+
+let palGrupoId = null;
+const bocadilloPaletas = Bocadillo.crear(document.getElementById('palPop'));
+
+function abrirPaletas(groupId, ancla) {
+  palGrupoId = groupId;
+  pintarPaletas();
+  document.getElementById('palBackdrop').style.display = 'block';
+  bocadilloPaletas.abrir(ancla);
+}
+
+function cerrarPaletas() {
+  palGrupoId = null;
+  document.getElementById('palBackdrop').style.display = 'none';
+  bocadilloPaletas.cerrar();
+}
+
+function pintarPaletas() {
+  const g = (currentState.groups || []).find(x => x.id === palGrupoId);
+  if (!g) { cerrarPaletas(); return; }
+  const pal = paletaDe(g);
+  document.getElementById('palSecName').textContent = g.name + (pal ? ` · ${pal.name}` : ' · sin paleta');
+  document.getElementById('palDot').style.setProperty('--c', pal ? pal.colors[0] : 'var(--text3)');
+  const list = document.getElementById('palList');
+  list.innerHTML = '';
+  const fila = (key, nombre, colores) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pal-row' + ((g.palette || '') === key ? ' sel' : '');
+    b.innerHTML = `<span class="pal-sw${colores.length ? '' : ' vacia'}"></span><span class="pal-name"></span><span class="pal-check">${ICONO_CHECK}</span>`;
+    const sw = b.querySelector('.pal-sw');
+    colores.forEach(c => { const i = document.createElement('i'); i.style.background = c; sw.appendChild(i); });
+    b.querySelector('.pal-name').textContent = nombre;
+    b.onclick = () => ipcRenderer.send('action', { type: 'set-group-palette', payload: { groupId: g.id, palette: key || null } });
+    list.appendChild(b);
+  };
+  fila('', 'Sin paleta', []);
+  Object.entries(currentState.palettes || {}).forEach(([k, p]) => fila(k, p.name, p.colors));
+  const n = currentState.tasks.filter(t => !t.deleted && t.groupId === g.id).length;
+  const rep = document.getElementById('palRepintar');
+  rep.disabled = !pal || !n;
+  rep.textContent = n ? `Repintar sus ${n} tareas` : 'Repintar sus tareas';
+}
+
+// Pasa las tareas que ya tiene la sección a tonos de su paleta (cada una con uno distinto).
+function repintarSeccion() {
+  const g = (currentState.groups || []).find(x => x.id === palGrupoId);
+  const pal = paletaDe(g);
+  if (!g || !pal) return;
+  const n = currentState.tasks.filter(t => !t.deleted && t.groupId === g.id).length;
+  showConfirmPopup('Repintar tareas',
+    `Las ${n} tareas de "${g.name}" pasan a tonos de la paleta ${pal.name}, cada una con uno distinto. Las entradas del calendario cambian de color con ellas.`,
+    'Repintar',
+    () => ipcRenderer.send('action', { type: 'recolor-group-tasks', payload: { groupId: g.id } }));
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && palGrupoId && document.getElementById('confirmPopup').style.display === 'none') cerrarPaletas();
+});
 
 // ---------- Popup crear / renombrar sección ----------
 function openSectionPopup(mode, groupId, currentName) {

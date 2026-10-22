@@ -22,21 +22,13 @@ const APP_ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 const WINDOW_ICON_PATH = path.join(__dirname, 'assets', 'icon.ico');
 const TASK_COLORS = ['#6366f1','#f472b6','#34d399','#fbbf24','#60a5fa','#f87171','#a78bfa','#2dd4bf'];
 // ── Temas de color ───────────────────────────────────────────────────────────
-// Cada tema define la paleta completa. Se envía a TODAS las ventanas (y a los iframes
-// del dock) por IPC y cada página la aplica como variables CSS; no se usa insertCSS
-// porque ese solo llega al frame principal y dejaría las vistas del dock sin tema.
-// `base` es el RGB del fondo, al que se le aplica la opacidad elegida por el usuario.
-const THEMES = {
-  indigo:   { name:'Índigo',   base:'18,18,28',    accent:'#818cf8', accent2:'#6366f1', surface:'#1c1c2a', scheme:'dark' },
-  grafito:  { name:'Grafito',  base:'16,16,18',    accent:'#a1a1aa', accent2:'#71717a', surface:'#1b1b1e', scheme:'dark' },
-  pizarra:  { name:'Pizarra',  base:'24,28,36',    accent:'#94a3b8', accent2:'#64748b', surface:'#212733', scheme:'dark' },
-  oceano:   { name:'Océano',   base:'12,22,34',    accent:'#38bdf8', accent2:'#0284c7', surface:'#12212f', scheme:'dark' },
-  bosque:   { name:'Bosque',   base:'12,24,20',    accent:'#34d399', accent2:'#059669', surface:'#122420', scheme:'dark' },
-  vino:     { name:'Vino',     base:'28,14,20',    accent:'#fb7185', accent2:'#e11d48', surface:'#291520', scheme:'dark' },
-  ambar:    { name:'Ámbar',    base:'28,20,10',    accent:'#fbbf24', accent2:'#d97706', surface:'#2a1f12', scheme:'dark' },
-  claro:    { name:'Claro',    base:'244,244,249', accent:'#4f46e5', accent2:'#4338ca', surface:'#ffffff', scheme:'light' },
-};
-const DEFAULT_THEME = 'indigo';
+// Los temas, los acentos y la paleta resuelta viven en themes.js (también los usan las
+// herramientas de captura de tools/).
+const { THEMES, DEFAULT_THEME, ACCENTS, themeVars: resolverTema } = require('./themes');
+const { GROUP_PALETTES, colorFromGroupPalette } = require('./palettes');
+// Versión de la interfaz: la 3 es el rediseño de la 2.8 (Noche cálida). Al pasar a ella se
+// estrena el tema nuevo una vez; después cada cual elige el que quiera en Ajustes.
+const UI_VERSION = 3;
 
 // Recorrido de novedades que se muestra UNA vez al actualizar. Solo para quien va por el
 // canal estable: en el de prueba las versiones se suceden a diario y sería un incordio.
@@ -144,7 +136,24 @@ const NOVEDADES_2_5 = {
   ],
 };
 
+const NOVEDADES_2_8 = {
+  title: 'Novedades de imputa.me 2.8',
+  steps: [
+    { icon:'spark', title:'Cara nueva',
+      text:'Toda la app rediseñada con estilo Mac: el tema Noche cálida (y Luz, el claro), letra nueva, cápsulas en vez de cajas y animaciones con muelle. Al cambiar de pestaña ya no quedan trozos en blanco.' },
+    { icon:'calendar', title:'El calendario, a mano',
+      text:'Un clic selecciona un rato (ya no lo abre); doble clic o Intro abre sus detalles. Ctrl+C lo copia, haces clic donde quieras y Ctrl+V lo pega ahí, viendo antes dónde va a quedar. Ctrl+D lo duplica y Supr lo borra.' },
+    { icon:'pencil', title:'Menú circular',
+      text:'Clic derecho sobre un rato: detalles, pausar o seguir, alargar hasta ahora, copiar, duplicar, color, sección y eliminar, en una rueda de cristal. Basta con mover el ratón hacia la opción. En un hueco: entrada nueva, pegar o empezar una tarea.' },
+    { icon:'guide', title:'Bocadillos de cristal',
+      text:'"Nueva entrada" y los detalles de un rato salen al lado del bloque, apuntándole, con cristal líquido que dobla lo que hay detrás. Si lo prefieres esmerilado, se apaga en Ajustes → Apariencia.' },
+    { icon:'folder', title:'Colores por sección',
+      text:'En Tareas, el botón de paleta de cada sección le da unos tonos (azules, verdes, naranjas…): cada tarea nueva de esa sección coge uno al azar. Con "Repintar" se los das también a las que ya tiene.' },
+  ],
+};
+
 const WHATS_NEW = {
+  '2.8.0': NOVEDADES_2_8,
   '2.2.0': NOVEDADES_2_2,
   '2.2.1': NOVEDADES_2_2,
   '2.3.0': NOVEDADES_2_3,
@@ -160,21 +169,6 @@ const WHATS_NEW = {
   '2.5.4': NOVEDADES_2_5,
   '2.5.5': NOVEDADES_2_5,
   '2.5.6': NOVEDADES_2_5,
-};
-
-// Color de acento (botones, resaltados) elegible aparte del fondo: cada tema trae el
-// suyo por defecto, pero se puede cambiar sin tocar los grises/negros/blancos del fondo.
-const ACCENTS = {
-  indigo:   { name:'Índigo',   accent:'#818cf8', accent2:'#6366f1' },
-  azul:     { name:'Azul',     accent:'#38bdf8', accent2:'#0284c7' },
-  turquesa: { name:'Turquesa', accent:'#2dd4bf', accent2:'#0d9488' },
-  verde:    { name:'Verde',    accent:'#34d399', accent2:'#059669' },
-  ambar:    { name:'Ámbar',    accent:'#fbbf24', accent2:'#d97706' },
-  naranja:  { name:'Naranja',  accent:'#fb923c', accent2:'#ea580c' },
-  rojo:     { name:'Rojo',     accent:'#fb7185', accent2:'#e11d48' },
-  rosa:     { name:'Rosa',     accent:'#f472b6', accent2:'#db2777' },
-  violeta:  { name:'Violeta',  accent:'#a78bfa', accent2:'#7c3aed' },
-  gris:     { name:'Gris',     accent:'#a1a1aa', accent2:'#71717a' },
 };
 
 const TRASH_RETENTION_DAYS = 30;   // cuánto tiempo se puede restaurar una tarea desde la papelera
@@ -327,6 +321,7 @@ let settings = {
   dockCalendarWidth: 1180, // el calendario se abre bastante más ancho (y se puede estirar)
   lastView: 'panel',    // última vista abierta: la app vuelve a abrirse por donde la dejaste
   archiveDays: 30,      // días sin usar una tarea antes de que pase al Archivador (0 = nunca)
+  uiVersion: 0,         // versión de la interfaz ya estrenada (ver UI_VERSION)
 };
 
 function nextAutoColor() {
@@ -363,6 +358,15 @@ function loadData() {
   try {
     if (fs.existsSync(SETTINGS_FILE)) settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
   } catch {}
+  // 2.8: estreno del rediseño. Una sola vez, el tema pasa a Noche cálida con su acento; a
+  // partir de ahí cada cual elige el que quiera en Ajustes y no se vuelve a tocar.
+  if ((Number(settings.uiVersion) || 0) < UI_VERSION) {
+    settings.theme = DEFAULT_THEME;
+    settings.accent = null;
+    settings.uiVersion = UI_VERSION;
+    saveSettings();
+  }
+  if (!THEMES[settings.theme]) settings.theme = DEFAULT_THEME;
 }
 
 // Escritura atómica: primero a un .tmp y luego se renombra encima. Si el PC se apaga a
@@ -639,10 +643,23 @@ function resumeEntry(taskId, entryIndex) {
   saveData(); broadcastState(); resetReminderTimer();
 }
 
+// Color de una tarea nueva: el elegido a mano si el modo es manual; si no, uno al azar de la
+// paleta de su sección (si la tiene) o el siguiente de la rueda de siempre.
+function colorForNewTask(groupId, manualColor) {
+  if (settings.colorMode === 'manual' && manualColor) return manualColor;
+  const g = groupId && state.groups.find(x => x.id === groupId);
+  if (g && g.palette) {
+    const enUso = state.tasks.filter(t => t.groupId === g.id && !t.deleted).map(t => t.color);
+    const c = colorFromGroupPalette(g.palette, enUso);
+    if (c) return c;
+  }
+  return nextAutoColor();
+}
+
 function createTask(name, color, opts) {
   const id = Date.now().toString();
-  const finalColor = settings.colorMode === 'manual' ? (color || nextAutoColor()) : nextAutoColor();
   const o = opts || {};
+  const finalColor = colorForNewTask(o.groupId, color);
   const taskType = o.taskType === 'oneShot' ? 'oneShot' : 'ongoing';
   const memo = (o.memo || '').trim().slice(0, 200);
   const task = { id, name, color: finalColor, entries: [], archived: false, groupId: null, taskType, memo };
@@ -827,6 +844,29 @@ function createGroup(name) {
   return group.id;
 }
 
+// Paleta de la sección (ver palettes.js). Sin paleta, sus tareas nuevas siguen la rueda de
+// colores de siempre.
+function setGroupPalette(groupId, palette) {
+  const g = state.groups.find(x => x.id === groupId);
+  if (!g) return;
+  if (palette && GROUP_PALETTES[palette]) g.palette = palette;
+  else delete g.palette;
+  saveData(); broadcastState();
+}
+
+// Repinta las tareas que ya tiene la sección con tonos de su paleta, todos distintos
+// mientras alcancen.
+function recolorGroupTasks(groupId) {
+  const g = state.groups.find(x => x.id === groupId);
+  if (!g || !g.palette) return;
+  const usados = [];
+  state.tasks.filter(t => t.groupId === g.id && !t.deleted).forEach(t => {
+    t.color = colorFromGroupPalette(g.palette, usados);
+    usados.push(t.color);
+  });
+  saveData(); broadcastState();
+}
+
 function renameGroup(groupId, name) {
   const g = state.groups.find(x => x.id === groupId);
   const n = (name || '').trim();
@@ -909,7 +949,7 @@ function addCalendarEntry(taskId, newTaskName, newTaskColor, startMs, endMs, not
   let task = state.tasks.find(t => t.id === taskId);
   if (!task && newTaskName) {
     const id = Date.now().toString();
-    const finalColor = settings.colorMode === 'manual' ? (newTaskColor || nextAutoColor()) : nextAutoColor();
+    const finalColor = colorForNewTask(newTaskGroupId, newTaskColor);
     task = { id, name: newTaskName, color: finalColor, entries: [], archived: false, groupId: null, taskType: 'ongoing', memo: '' };
     // La sección es solo su etiqueta (igual que al crear desde "Empezar una tarea
     // ahora"): se le pone y la tarea sigue sin archivar, así que nace ya dentro de su
@@ -1441,19 +1481,6 @@ function scheduleWidgetAutoHide() {
   widgetHideTimer = setTimeout(() => { widgetHideTimer = null; hideWidget(); }, ms);
 }
 
-// El blur (acrílico) está SIEMPRE puesto. El deslizador controla la opacidad del
-// tinte oscuro que va sobre el cristal: más opaco (tapa el blur, más sólido) o más
-// translúcido (se ve más el blur del escritorio). Como el material no cambia, no
-// aparece el "gris" de togglear el material en caliente.
-function bgAlphaFromOpacity(op) {
-  const x = Math.max(0, Math.min(100, op == null ? 50 : Number(op))) / 100;
-  // El acrílico de Windows YA pone su propio tinte (grisáceo). Si nuestro tinte baja
-  // demasiado, manda el suyo y el resultado se ve lavado/blanquecino en vez de "tu color
-  // con el fondo difuminado". Por eso el mínimo no baja de ~0.30: en todo el recorrido
-  // se sigue viendo el color del tema, cambiando cuánto se transparenta.
-  return (0.30 + x * 0.64).toFixed(3);
-}
-
 function applyTranslucency(win) {
   if (!win || win.isDestroyed()) return;
   try { win.setOpacity(1); } catch {}
@@ -1472,46 +1499,16 @@ function applySystemThemeSource() {
 
 function applyTranslucencyAll() {
   applySystemThemeSource();
-  // La ventana de la barrita NO lleva material (es transparente a propósito); la del
-  // panel sí, y por eso puede difuminar.
-  [mainWin, calendarWin, groupsWin, settingsWin, widgetWin, syncWin, updateWin, dockPanelWin]
+  // Ni la barrita ni (desde la 2.8) el panel del dock llevan material: son transparentes a
+  // propósito, y además applyTranslucency les haría setOpacity (ver createDockPanel).
+  [mainWin, calendarWin, groupsWin, settingsWin, widgetWin, syncWin, updateWin]
     .forEach(w => applyTranslucency(w));
   broadcastTheme();
 }
 
-// Paleta actual, ya resuelta (incluye el --bg con la opacidad elegida). Se manda a los
-// renderers, que la aplican como variables CSS: así llega también a las vistas del dock,
-// que van en iframes (insertCSS solo alcanzaría al frame principal).
-function hexToRgb(hex) {
-  const h = String(hex || '').replace('#', '');
-  const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
-  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
-}
-
+// Paleta actual, ya resuelta (ver themes.js).
 function themeVars() {
-  const t = THEMES[settings.theme] || THEMES[DEFAULT_THEME];
-  const acc = ACCENTS[settings.accent];   // si no hay elegido, manda el del tema
-  const light = t.scheme === 'light';
-  // El panel del dock lleva el contenido, así que su fondo sigue al deslizador pero con
-  // un suelo bastante alto: con el alfa general (que puede bajar mucho) se transparentaba
-  // tanto que no se leía nada y se perdían los bordes.
-  const x = Math.max(0, Math.min(100, settings.bgOpacity == null ? 50 : Number(settings.bgOpacity))) / 100;
-  const panelAlpha = (0.44 + x * 0.52).toFixed(3);
-  return {
-    key: settings.theme,
-    bg: `rgba(${t.base},${bgAlphaFromOpacity(settings.bgOpacity)})`,
-    bg2: light ? 'rgba(0,0,0,0.045)' : 'rgba(255,255,255,0.06)',
-    bg3: light ? 'rgba(0,0,0,0.085)' : 'rgba(255,255,255,0.10)',
-    border: light ? 'rgba(0,0,0,0.14)' : 'rgba(255,255,255,0.12)',
-    text: light ? '#1a1a24' : '#f0f0f8',
-    text2: light ? 'rgba(26,26,36,0.6)' : 'rgba(240,240,248,0.55)',
-    accent: acc ? acc.accent : t.accent,
-    accent2: acc ? acc.accent2 : t.accent2,
-    accentKey: settings.accent || null,
-    surface: t.surface,
-    panel: `rgba(${hexToRgb(t.surface)},${panelAlpha})`,
-    scheme: t.scheme,
-  };
+  return resolverTema(settings);
 }
 
 function broadcastTheme() {
@@ -1753,12 +1750,14 @@ function createDockPanel() {
     ...computePanelBounds(dockPanelView),
     show: false,
     frame: false, hasShadow: false,
-    // SIN transparent: en Windows el acrílico (lo que difumina el fondo de verdad) se
-    // ignora en ventanas transparentes. Por eso el panel salió de la ventana de la
-    // barrita, que sí tiene que ser transparente para dejar pasar los clics.
-    transparent: false, backgroundColor: '#00000000',
-    backgroundMaterial: settings.blurEnabled === false ? 'none' : 'acrylic',
-    resizable: false, movable: false, skipTaskbar: true, alwaysOnTop: true, roundedCorners: true,
+    // 2.8: TRANSPARENTE y sin acrílico. Con el acrílico Windows solo deja esquinas de 8 px
+    // (y se veían dos esquinas: la de la ventana y la del panel), y para desvanecerla había
+    // que usar setOpacity, que en Windows la convierte en ventana "en capas" para siempre:
+    // a partir de ahí dejaba de pintar las animaciones (por eso las pestañas no se
+    // animaban). Ahora el panel es una tarjeta de la página, con las esquinas que quiera, y
+    // todas sus animaciones (entrar, salir, cambiar de ancho) las hace la propia página.
+    transparent: true, backgroundColor: '#00000000',
+    resizable: false, movable: false, skipTaskbar: true, alwaysOnTop: true, roundedCorners: false,
     icon: WINDOW_ICON_PATH,
     // Sin backgroundThrottling:false: plegado está oculto y no debe pintar (ver makeWindow).
     webPreferences: { nodeIntegration: true, contextIsolation: false, nodeIntegrationInSubFrames: true },
@@ -1971,61 +1970,45 @@ function syncDockBounds() {
   }
 }
 
-function fadeWindow(win, from, to, ms, done) {
-  if (!win || win.isDestroyed()) return;
-  if (win.__fade) { clearTimeout(win.__fade); win.__fade = null; }
-  const token = (win.__fadeToken = (win.__fadeToken || 0) + 1);
-  const start = performance.now();
-  try { win.setOpacity(from); } catch {}
-  const paso = () => {
-    if (!win || win.isDestroyed() || win.__fadeToken !== token) { win.__fade = null; return; }
-    const t = Math.min(1, (performance.now() - start) / ms);
-    // Suavizado también aquí: en lineal se nota que arranca y para de golpe.
-    const k = 1 - Math.pow(1 - t, 3);
-    try { win.setOpacity(from + (to - from) * k); } catch {}
-    if (t >= 1) { win.__fade = null; if (done) { try { done(); } catch {} } return; }
-    win.__fade = setTimeout(paso, 6);
-  };
-  win.__fade = setTimeout(paso, 0);
-}
-
-// Entra deslizando LA VENTANA desde fuera de la pantalla. Animar solo el contenido
-// dejaba a la vista el rectángulo acrílico de la ventana (el "panel gris" de detrás).
+// 2.8: la ventana (transparente) se coloca y se enseña ya en su sitio, y es la página la
+// que hace entrar el panel deslizándolo desde el borde (ver dock-panel.html). Mientras
+// estaba escondido el panel se quedó fuera de la vista, así que al enseñar la ventana no
+// se ve nada hasta que entra.
 function showDockPanel() {
   createDockPanel();
   if (!dockPanelWin || dockPanelWin.isDestroyed()) return;
   const target = computePanelBounds(dockPanelView);
   const wasVisible = dockPanelWin.isVisible();
-  // La ventana se coloca YA en su sitio: la sensación de aparecer la da el desvanecido.
-  // Antes se desplazaba fotograma a fotograma y por eso iba a tirones.
   // Oculto está frenado y puede llevar un fotograma viejo: el estado al día antes de verse.
   if (!wasVisible) sendStateToWindow(dockPanelWin);
+  dockPanelWin.__salida = (dockPanelWin.__salida || 0) + 1;   // anula una salida a medias
   try {
     dockPanelWin.setBounds(target);
-    if (!wasVisible) dockPanelWin.setOpacity(0);
     dockPanelWin.showInactive(); dockPanelWin.moveTop(); dockPanelWin.focus();
   } catch {}
   dockExpanded = true; dockOutsideSince = 0; dockPanelShownAt = Date.now();
   showDockHide(target);
-  if (wasVisible) { try { dockPanelWin.setOpacity(1); } catch {} }
-  else fadeWindow(dockPanelWin, 0, 1, 170);
+  try { dockPanelWin.webContents.send('panel-entrar'); } catch {}
   sendToAllFrames(dockPanelWin, 'dock-expanded');
 }
 
-// Sale deslizando la ventana entera y, al terminar, se esconde.
+// La página saca el panel deslizándolo hacia el borde y avisa ('dock-panel-salido');
+// entonces se esconde la ventana. Si vuelve a abrirse a medio camino, no se esconde.
 function collapseDockPanel() {
   dockExpanded = false; dockOutsideSince = 0;
   if (dockWin && !dockWin.isDestroyed()) { try { dockWin.webContents.send('dock-collapse'); } catch {} }
-  // Se escondia de golpe aqui arriba y luego se le pedia un desvanecido que ya no se
-  // veia. Ahora solo se corta en seco si no hay panel del que despedirse.
   if (!dockPanelWin || dockPanelWin.isDestroyed() || !dockPanelWin.isVisible()) { hideDockHide(); return; }
   hideDockHide();
-  fadeWindow(dockPanelWin, 1, 0, 150, () => {
-    try {
-      if (dockPanelWin && !dockPanelWin.isDestroyed()) { dockPanelWin.hide(); dockPanelWin.setOpacity(1); }
-    } catch {}
+  const token = (dockPanelWin.__salida = (dockPanelWin.__salida || 0) + 1);
+  const esconder = () => {
+    if (!dockPanelWin || dockPanelWin.isDestroyed() || dockPanelWin.__salida !== token || dockExpanded) return;
+    dockPanelWin.__alSalir = null;
+    try { dockPanelWin.hide(); } catch {}
     ensureDockBarVisible();   // al cerrarse el panel, la barrita tiene que estar ahí
-  });
+  };
+  dockPanelWin.__alSalir = esconder;
+  try { dockPanelWin.webContents.send('panel-salir'); } catch {}
+  setTimeout(esconder, 420);   // por si la página no llega a avisar
 }
 
 // Empuja la config visual al renderer del dock (al crearlo y al cambiar Ajustes).
@@ -2394,6 +2377,7 @@ function getSerializableState() {
       };
     }),
     groups: sortedGroups(),
+    palettes: GROUP_PALETTES,
     activeTaskId: state.activeTaskId,
     activeSubId: state.activeSubId || null,
     todayTotal: totalTodaySeconds(),
@@ -2430,16 +2414,47 @@ function sendStateToWindow(win) {
   sendToAllFrames(win, 'state', getSerializableState());
 }
 
-function broadcastState() {
+// Vista del dock que se ve ahora. Desde la 2.8 las cuatro viven a la vez (una por
+// iframe): solo la visible recibe el estado de cada segundo, y la que entra lo recibe al
+// momento al cambiar de pestaña (ver 'dock-view-changed').
+const DOCK_VIEW_FILE = { panel: 'main.html', calendar: 'calendar.html', groups: 'groups.html', settings: 'settings.html' };
+function activeDockFrames() {
+  if (!dockPanelWin || dockPanelWin.isDestroyed()) return [];
+  let todos = [];
+  try { todos = dockPanelWin.webContents.mainFrame.frames || []; } catch { return []; }
+  const fichero = DOCK_VIEW_FILE[dockPanelView] || 'main.html';
+  return todos.filter(f => { try { return String(f.url || '').includes(fichero); } catch { return false; } });
+}
+function sendStateToActiveDockFrame() {
+  const fr = activeDockFrames();
+  if (!fr.length) return;
+  const s = getSerializableState();
+  fr.forEach(f => { try { f.send('state', s); } catch {} });
+}
+
+// Todas las vistas del panel del dock (visibles o no).
+function allDockFrames() {
+  if (!dockPanelWin || dockPanelWin.isDestroyed()) return [];
+  let todos = [];
+  try { todos = dockPanelWin.webContents.mainFrame.frames || []; } catch { return []; }
+  const ficheros = Object.values(DOCK_VIEW_FILE);
+  return todos.filter(f => { try { return ficheros.some(x => String(f.url || '').includes(x)); } catch { return false; } });
+}
+
+let ticsDock = 0;
+// opts.tic: es el refresco de cada segundo (solo cambian los tiempos), no un cambio de verdad.
+function broadcastState(opts) {
   updateTrayTitle();
   // Se calcula una sola vez (antes, una por ventana, cada segundo).
   const s = getSerializableState();
   [widgetWin, mainWin, calendarWin, groupsWin].forEach(w => sendToAllFrames(w, 'state', s));
-  // El panel del dock lo escucha su iframe (panel/calendario/guardadas), no la página
-  // que lo envuelve. La barrita (dockWin) no escucha 'state' y ya no se le manda.
-  if (dockPanelWin && !dockPanelWin.isDestroyed()) {
-    try { (dockPanelWin.webContents.mainFrame.frames || []).forEach(f => { try { f.send('state', s); } catch {} }); } catch {}
-  }
+  // El panel del dock lo escucha su iframe (panel/calendario/tareas), no la página que lo
+  // envuelve; la barrita (dockWin) no escucha 'state'. Con un cambio de verdad se ponen al
+  // día TODAS sus vistas: así la que entra al cambiar de pestaña ya está pintada y no tiene
+  // que rehacerse justo mientras se anima (eso era lo que se comía la animación). Con el
+  // tic de cada segundo, solo la visible, y las escondidas cada cinco.
+  const todas = !(opts && opts.tic) || (++ticsDock % 5 === 0);
+  (todas ? allDockFrames() : activeDockFrames()).forEach(f => { try { f.send('state', s); } catch {} });
 }
 
 ipcMain.on('action', (event, { type, payload }) => {
@@ -2466,6 +2481,7 @@ ipcMain.on('action', (event, { type, payload }) => {
         taskType: payload.taskType,
         memo: payload.memo,
         erpId: payload.erpId,
+        groupId: payload.groupId,   // solo para el color: de su paleta, si la sección tiene
       });
       // La sección es solo su etiqueta: se le pone y sigue sin archivar, así que nace
       // dentro de su sección en Tareas y a la vez a mano en el Panel.
@@ -2498,6 +2514,8 @@ ipcMain.on('action', (event, { type, payload }) => {
     case 'rename-group':  renameGroup(payload.groupId, payload.name); break;
     case 'delete-group':  deleteGroup(payload.groupId); break;
     case 'move-task-to-group': moveTaskToGroup(payload.taskId, payload.groupId); break;
+    case 'set-group-palette': setGroupPalette(payload.groupId, payload.palette); break;
+    case 'recolor-group-tasks': recolorGroupTasks(payload.groupId); break;
     case 'set-eye-care': {
       const p = payload || {};
       const antesActivo = !!settings.eyeCareEnabled;
@@ -2680,41 +2698,61 @@ ipcMain.on('action', (event, { type, payload }) => {
       if (payload && payload.view) {
         dockPanelView = payload.view;
         rememberView(payload.view);
-        // El calendario tiene su propio ancho. La ventana se ANIMA hasta el tamaño
-        // nuevo, y el renderer espera a que llegue para dejar entrar el contenido: si
-        // no, el nuevo aparece mientras la ventana todavia se estira y se le ve
-        // recolocarse entero. El punto de partida se pasa explicito (ver
-        // animateWindowBounds), que leerlo justo despues de un setBounds no es fiable.
+        // 2.8: las vistas ya no se recargan (cada una vive en su iframe) y están al día (ver
+        // broadcastState). Los tiempos se refrescan cuando ha terminado de entrar: mandárselos
+        // antes la hacía repintarse en mitad de la animación.
+        setTimeout(sendStateToActiveDockFrame, 700);
         if (dockPanelWin && !dockPanelWin.isDestroyed()) {
           let desde = null;
           try { desde = dockPanelWin.getBounds(); } catch {}
           const nb = computePanelBounds(dockPanelView);
           const cambiaTamano = !desde || desde.width !== nb.width || desde.height !== nb.height;
-          const RESIZE_MS = 280;
-          const dejarEntrar = () => { try { dockPanelWin.webContents.send('dock-panel-resized'); } catch {} };
 
-          if (!cambiaTamano) {
-            // Entre panel, guardadas y ajustes el ancho es el mismo: no hay nada que
-            // animar, y hacer esperar al contenido solo lo volveria lento.
+          if (!cambiaTamano || !dockPanelWin.isVisible()) {
+            // Mismo ancho (panel, tareas, ajustes) o panel plegado: la vista se cruza sola
+            // dentro de la ventana, sin tocarla.
+            dockPanelWin.__boundsTween = false;
             try { dockPanelWin.setBounds(nb); } catch {}
             positionDockHide(nb);
-            dejarEntrar();
+            try { dockPanelWin.webContents.send('dock-panel-resized', { cambiaTamano: false }); } catch {}
           } else {
-            animateWindowBounds(dockPanelWin, nb, {
-              ms: RESIZE_MS,
-              from: desde,
-              // Suave por los dos lados: arranca sin tiron y frena al llegar.
-              ease: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
-              onFrame: (b) => positionDockHide(b),
-              onDone: () => positionDockHide(computePanelBounds(dockPanelView)),
-            });
-            // Se deja entrar el contenido antes de que la ventana termine del todo: al
-            // 60% ya casi no cambia de ancho, asi que no se le ve recolocarse, y
-            // encadenarlo despues del final hacia el cambio de pestaña lento de mas.
-            setTimeout(dejarEntrar, Math.round(RESIZE_MS * 0.6));
+            // Cambia el ancho (el calendario es más ancho). La ventana es transparente y el
+            // panel una tarjeta de la página: la tarjeta anima su ancho y la ventana solo
+            // cambia de tamaño donde no se nota. Al crecer, la ventana se agranda YA (la
+            // tarjeta sigue con su ancho, fijado por la página antes de avisar) y la tarjeta
+            // crece hasta llenarla; al encoger, la tarjeta encoge primero y la ventana se
+            // ajusta cuando ha terminado ('dock-panel-encogido').
+            const crece = nb.width > desde.width || nb.height > desde.height;
+            dockPanelWin.__boundsTween = true;   // que nadie la recoloque a medio camino
+            positionDockHide(nb);                // el botón de esconder viaja a la vez
+            if (crece) { try { dockPanelWin.setBounds(nb); } catch {} }
+            else dockPanelWin.__alEncoger = () => {
+              dockPanelWin.__alEncoger = null;
+              if (dockPanelView !== payload.view) return;
+              try { dockPanelWin.setBounds(nb); } catch {}
+            };
+            try {
+              dockPanelWin.webContents.send('dock-panel-resized',
+                { cambiaTamano: true, crece, hasta: { w: nb.width, h: nb.height } });
+            } catch {}
+            // Red de seguridad: si la página no llega a avisar, se deja todo en su sitio igual.
+            setTimeout(() => {
+              if (!dockPanelWin || dockPanelWin.isDestroyed()) return;
+              if (dockPanelWin.__alEncoger) dockPanelWin.__alEncoger();
+              dockPanelWin.__boundsTween = false;
+            }, 1500);
           }
         }
       }
+      break;
+    case 'dock-panel-encogido':   // la página ya ha encogido la tarjeta: ajusta la ventana
+      if (dockPanelWin && !dockPanelWin.isDestroyed() && dockPanelWin.__alEncoger) dockPanelWin.__alEncoger();
+      break;
+    case 'dock-panel-ancho-hecho':   // terminó la animación de ancho (crecer o encoger)
+      if (dockPanelWin && !dockPanelWin.isDestroyed()) dockPanelWin.__boundsTween = false;
+      break;
+    case 'dock-panel-salido':     // el panel ya ha salido deslizándose: se esconde la ventana
+      if (dockPanelWin && !dockPanelWin.isDestroyed() && dockPanelWin.__alSalir) dockPanelWin.__alSalir();
       break;
     case 'dock-panel-resize':
       if (dockPanelWin && !dockPanelWin.isDestroyed() && payload) {
@@ -3007,10 +3045,44 @@ ipcMain.handle('sync-login', async (_e, { email, password }) => sync ? sync.logi
 ipcMain.handle('sync-logout', async () => sync ? sync.logout() : { ok: true });
 ipcMain.handle('sync-status', async () => syncStatus);
 
+// 2.8: foto de la ventana para el cristal líquido de los bocadillos (src/glass.js). Va en
+// crudo (BGRA, sin comprimir: es lo más rápido) junto con el ancho de la página en px CSS,
+// para saber la escala, y, si quien la pide va dentro del panel del dock (en un iframe),
+// dónde cae ese iframe dentro de la ventana.
+ipcMain.handle('capture-region', async (event) => {
+  try {
+    const wc = event.sender;
+    if (!wc || wc.isDestroyed()) return null;
+    const frame = event.senderFrame;
+    let vista = null;
+    if (frame && frame.parent) {
+      vista = Object.keys(DOCK_VIEW_FILE).find(v => (frame.url || '').includes(DOCK_VIEW_FILE[v]));
+      if (!vista) return null;
+    }
+    const sitio = await wc.executeJavaScript(`(() => {
+      const f = ${vista ? `document.querySelector('iframe[data-view="${vista}"]')` : 'null'};
+      const r = f ? f.getBoundingClientRect() : { left: 0, top: 0 };
+      return { iw: window.innerWidth, ih: window.innerHeight, x: r.left, y: r.top };
+    })()`);
+    if (!sitio || !sitio.iw) return null;
+    const img = await wc.capturePage();
+    if (!img || img.isEmpty()) return null;
+    const data = img.toBitmap();
+    let { width: pw, height: ph } = img.getSize();
+    if (data.length !== pw * ph * 4) {
+      // Según la versión, getSize() va en px lógicos y el mapa de bits en px reales.
+      const s = Math.sqrt(data.length / 4 / (pw * ph));
+      pw = Math.round(pw * s); ph = Math.round(ph * s);
+      if (data.length !== pw * ph * 4) return null;
+    }
+    return { data, pw, ph, iw: sitio.iw, ih: sitio.ih, offX: sitio.x, offY: sitio.y };
+  } catch { return null; }
+});
+
 function startTick() {
   tickTimer = setInterval(() => {
     // broadcastState ya actualiza la bandeja: llamarla también aquí era hacerlo doble.
-    if (state.activeTaskId) broadcastState();
+    if (state.activeTaskId) broadcastState({ tic: true });
     else updateTrayTitle();
   }, 1000);
 }

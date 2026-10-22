@@ -34,8 +34,17 @@ function applyThemeVars(t) {
   s.setProperty('--accent2', t.accent2);
   s.setProperty('--surface', t.surface);
   s.setProperty('--panel', t.panel || t.surface);
+  // 2.8: textos terciarios, cristal líquido y brillos cálidos de fondo (ver themes.js).
+  if (t.text3) s.setProperty('--text3', t.text3);
+  if (t.glass) s.setProperty('--glass-rgb', t.glass);
+  if (t.glassTint != null) s.setProperty('--glass-tint', String(t.glassTint));
+  ['glow1', 'glow2', 'glow3', 'danger', 'success'].forEach(k => { if (t[k]) s.setProperty('--' + k, t[k]); });
   s.setProperty('color-scheme', t.scheme);
   document.documentElement.dataset.theme = t.key || '';
+  document.documentElement.dataset.scheme = t.scheme || 'dark';
+  document.documentElement.dataset.glass = t.liquidGlass === false ? 'off' : 'on';
+  window.__theme = t;   // quien escuche 'theme-change' lo lee de aquí
+  if (typeof Event === 'function') window.dispatchEvent(new Event('theme-change'));
 }
 (function () {
   let ipc = null;

@@ -13,7 +13,8 @@ const fs = require('fs');
 const path = require('path');
 
 const htmls = fs.readdirSync('src').filter(f => f.endsWith('.html')).map(f => path.join('src', f));
-const js = ['main.js', 'sync.js', 'src/shared.js', 'src/calendar-dnd.js'].filter(f => fs.existsSync(f));
+const js = ['main.js', 'sync.js', 'themes.js', 'palettes.js', 'src/shared.js', 'src/calendar-dnd.js',
+            'src/glass.js', 'src/bocadillo.js', 'src/radial.js'].filter(f => fs.existsSync(f));
 
 const pasos = [
   ['sintaxis de los .js', [...js.flatMap(f => ['--check', f])], true],

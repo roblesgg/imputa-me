@@ -219,6 +219,8 @@
   .conflict-choice { font-size:11.5px;padding:6px 10px;border-radius:8px; }
   .conflict-choice.active-choice { border-color:var(--accent);color:var(--text);background:color-mix(in srgb, var(--accent2) 24%, transparent); }
 </style>
+<!-- 2.8: estilo «Suave» (rediseño Mac). Va el último para mandar sobre lo de arriba. -->
+<link rel="stylesheet" href="mac.css">
 </head>
 <body>
 <div class="app animate-in">
@@ -435,6 +437,17 @@
       </div>
       <div class="row">
         <div class="row-text">
+          <span class="row-title">Cristal líquido</span>
+          <span class="row-desc">Los bocadillos y el menú del calendario doblan lo que hay detrás, como un cristal. Si lo apagas, se quedan esmerilados.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="liquidGlass">
+          <span class="switch-track"></span>
+          <span class="switch-knob"></span>
+        </label>
+      </div>
+      <div class="row">
+        <div class="row-text">
           <span class="row-title">Colores manuales</span>
           <span class="row-desc">Elegir tú el color de cada tarea nueva.</span>
         </div>
@@ -619,12 +632,17 @@
 </div>
 
 <script src="shared.js"></script>
+<script src="glass.js"></script>
+<script src="bocadillo.js"></script>
 <script>
 const { ipcRenderer } = require('electron');
 
 const DOCK_COLORS = ['#ffffff','#cbd5e1','#94a3b8','#6366f1','#38bdf8','#34d399','#fbbf24','#fb7185','#a78bfa'];
 // Mismo orden y claves que THEMES en main.js (bg de muestra + acento).
 const THEME_LIST = [
+  // 2.8: los dos del rediseño van primero (Noche cálida es el de por defecto).
+  { key:'noche',   name:'Noche cálida', bg:'radial-gradient(circle at 30% 25%, #4a2a1c, #141013 70%)' },
+  { key:'luz',     name:'Luz',          bg:'radial-gradient(circle at 30% 25%, #ffd9bf, #f2ece7 70%)' },
   { key:'indigo',  name:'Índigo',  bg:'#12121c' },
   { key:'grafito', name:'Grafito', bg:'#101012' },
   { key:'pizarra', name:'Pizarra', bg:'#181c24' },
@@ -642,7 +660,7 @@ const ACCENT_LIST = [
   { key:'turquesa', color:'#0d9488' },
   { key:'verde',    color:'#059669' },
   { key:'ambar',    color:'#d97706' },
-  { key:'naranja',  color:'#ea580c' },
+  { key:'naranja',  color:'#ff9f5a' },
   { key:'rojo',     color:'#e11d48' },
   { key:'rosa',     color:'#db2777' },
   { key:'violeta',  color:'#7c3aed' },
@@ -1009,6 +1027,7 @@ ipcRenderer.on('settings', (_, s) => {
   document.getElementById('openAtLogin').checked = !!s.openAtLogin;
   document.getElementById('bgOpacity').value = (s.bgOpacity == null ? 50 : s.bgOpacity);
   document.getElementById('blurEnabled').checked = s.blurEnabled !== false;
+  document.getElementById('liquidGlass').checked = s.liquidGlass !== false;
   document.getElementById('betaUpdates').checked = !!s.betaUpdates;
   tutorialSeen = s.tutorialSeenSteps || [];
   setTimeout(maybeStartTutorial, 60);   // tras pintar temas, colores y la barra flotante
@@ -1043,7 +1062,7 @@ ipcRenderer.on('settings', (_, s) => {
   buildLeaveDays();
   updateLeaveVisibility();
 
-  currentTheme = s.theme || 'indigo';
+  currentTheme = s.theme || 'noche';
   currentAccent = s.accent || null;
   buildThemeGrid();
   buildAccentSwatches();
@@ -1088,6 +1107,7 @@ function save() {
     openAtLogin: document.getElementById('openAtLogin').checked,
     bgOpacity: parseInt(document.getElementById('bgOpacity').value) || 0,
     blurEnabled: document.getElementById('blurEnabled').checked,
+    liquidGlass: document.getElementById('liquidGlass').checked,
     betaUpdates: document.getElementById('betaUpdates').checked,
     theme: currentTheme,
     accent: currentAccent,

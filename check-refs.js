@@ -30,6 +30,9 @@ const GLOBALS = new Set(['require', 'setTimeout', 'setInterval', 'clearTimeout',
   'encodeURIComponent', 'decodeURIComponent', 'queueMicrotask', 'structuredClone',
   'requestAnimationFrame', 'cancelAnimationFrame', 'alert', 'confirm', 'prompt', 'Event', 'URLSearchParams', 'performance',
   'Set', 'Map', 'WeakMap', 'WeakSet', 'RegExp', 'Proxy', 'Reflect', 'async', 'URL', 'Image',
+  // del navegador (glass.js, radial.js…):
+  'Float32Array', 'Uint8Array', 'getComputedStyle', 'ResizeObserver', 'Blob', 'createImageBitmap',
+  'MouseEvent', 'PointerEvent', 'MutationObserver',
   // definidas en shared.js, que las páginas cargan con <script src> aparte:
   'isViewVisibleToUser', 'startTutorialIfNeeded', 'computeBackMinutes', 'contrastTextColor',
   'applyThemeVars', 'tutAllStepIds', 'tutIsVisible', 'runTutorial', 'askText', 'pickImputeUrl',
@@ -83,6 +86,8 @@ for (const file of process.argv.slice(2)) {
   // pero se escriben igual que una. Sin esto, cada metodo de un API devuelta como objeto
   // salia como funcion inexistente.
   for (const m of code.matchAll(/[,{]\s*([A-Za-z_$][\w$]*)\s*\([^()]*\)\s*\{/g)) declared.add(m[1]);
+  // Lo mismo con los metodos de una clase: van al principio de su linea, sin coma delante.
+  for (const m of code.matchAll(/^\s*(?:async\s+|static\s+)*([A-Za-z_$][\w$]*)\s*\([^()]*\)\s*\{/gm)) declared.add(m[1]);
 
   const missing = new Set();
   for (const m of code.matchAll(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/gm)) {

@@ -24,9 +24,9 @@
     position:absolute; cursor:pointer; border-radius:999px;
     background:var(--bar-color);
     opacity:var(--bar-opacity);
-    box-shadow:0 2px 10px rgba(0,0,0,.35);
+    box-shadow:0 2px 10px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.16);
     will-change:transform, opacity;
-    transition:opacity .22s ease, transform .22s cubic-bezier(.34,1.4,.5,1);
+    transition:opacity .3s ease, transform .5s cubic-bezier(.34,1.56,.64,1);
   }
   .dock-bar.near { opacity:1; }
   .a-right .dock-bar, .a-left .dock-bar {
@@ -74,28 +74,36 @@
 
 
   /* ── Botón de esconder el panel ─────────────────────────────────────────── */
+  /* 2.8: una perla maciza del color del tema, sin bordes; nace con muelle, al cambiar el
+     panel de ancho se desliza a su sitio nuevo (no salta) y al pasar por encima se tiñe
+     del acento y la flecha se asoma hacia donde se irá el panel. */
   .hide-btn {
-    position:fixed; left:0; top:0; width:34px; height:34px; padding:0;
-    margin:-17px 0 0 -17px;            /* las coordenadas que llegan son las del CENTRO */
-    border-radius:50%;
+    position:fixed; left:0; top:0; width:36px; height:36px; padding:0;
+    margin:-18px 0 0 -18px;            /* las coordenadas que llegan son las del CENTRO */
+    border-radius:50%; border:none;
     display:none; align-items:center; justify-content:center;
-    background:var(--surface); color:var(--text2);
-    border:1px solid color-mix(in srgb, var(--text) 22%, transparent);
-    box-shadow:0 4px 18px rgba(0,0,0,.5);
+    background:color-mix(in srgb, var(--surface) 95%, transparent); color:var(--text2);
+    box-shadow:0 12px 28px -10px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.25),
+               inset 0 1px 0 rgba(255,255,255,.09), inset 0 0 0 1px rgba(255,255,255,.07);
     cursor:pointer; z-index:20;
-    transition:background .18s, color .18s, transform .22s cubic-bezier(.34,1.5,.5,1), box-shadow .18s, opacity .16s;
+    transition:left .55s cubic-bezier(.34,1.3,.64,1), top .55s cubic-bezier(.34,1.3,.64,1),
+               background-color .2s ease, color .2s ease, transform .45s cubic-bezier(.34,1.56,.64,1);
   }
-  .hide-btn.visible { display:flex; }
-  .hide-btn svg { transition:transform .22s cubic-bezier(.34,1.5,.5,1); }
-  .hide-btn:hover {
-    background:var(--accent2); color:#fff;
-    box-shadow:0 6px 22px color-mix(in srgb, var(--accent2) 60%, transparent);
+  :root[data-scheme="light"] .hide-btn {
+    background:rgba(255,255,255,.97);
+    box-shadow:0 10px 24px -10px rgba(80,40,10,.35), 0 2px 6px rgba(80,40,10,.12), inset 0 0 0 1px rgba(0,0,0,.05);
   }
-  .hide-btn:active { transform:scale(.94); }
+  .hide-btn.sin-mov { transition:none; }
+  .hide-btn.visible { display:flex; animation:perlaEntra .5s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes perlaEntra { from { opacity:0; transform:scale(.3); } to { opacity:1; transform:none; } }
+  .hide-btn:hover { background:color-mix(in srgb, var(--accent2) 24%, var(--surface)); color:var(--accent); transform:scale(1.1); }
+  .hide-btn:active { transform:scale(.92); }
   /* La flecha apunta hacia el lado por el que se va el panel al esconderse. */
-  .a-left  ~ .hide-btn svg { transform:scaleX(-1); }
-  .a-top   ~ .hide-btn svg { transform:rotate(-90deg); }
-  .a-bottom ~ .hide-btn svg { transform:rotate(90deg); }
+  .hide-btn svg { transform:rotate(var(--rot, 0deg)); transition:transform .4s cubic-bezier(.34,1.56,.64,1); }
+  .hide-btn:hover svg { transform:rotate(var(--rot, 0deg)) translateX(2px); }
+  .a-left  ~ .hide-btn { --rot:180deg; }
+  .a-top   ~ .hide-btn { --rot:-90deg; }
+  .a-bottom ~ .hide-btn { --rot:90deg; }
 </style>
 </head>
 <body>
@@ -186,9 +194,14 @@ bar.addEventListener('contextmenu', (e) => {
 // ventana) y si toca enseñarlo.
 ipcRenderer.on('dock-hide-btn', (_, info) => {
   if (!info || !info.visible) { hideBtn.classList.remove('visible'); sendHitRects(); return; }
+  // Si ya se veía, se desliza a su sitio nuevo; si aparece ahora, nace ya en su sitio
+  // (si no, entraría deslizándose desde la esquina).
+  const yaSeVeia = hideBtn.classList.contains('visible');
+  if (!yaSeVeia) hideBtn.classList.add('sin-mov');
   hideBtn.style.left = info.x + 'px';
   hideBtn.style.top = info.y + 'px';
   hideBtn.classList.add('visible');
+  if (!yaSeVeia) { void hideBtn.offsetWidth; hideBtn.classList.remove('sin-mov'); }
   sendHitRects();
 });
 hideBtn.addEventListener('click', (e) => {

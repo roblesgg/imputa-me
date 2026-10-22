@@ -422,6 +422,8 @@
     color:var(--text);font-family:inherit;font-size:13px;padding:7px 9px;outline:none;color-scheme:dark;-webkit-app-region:no-drag;
   }
 </style>
+<!-- 2.8: estilo «Suave» (rediseño Mac). Va el último para mandar sobre lo de arriba. -->
+<link rel="stylesheet" href="mac.css">
 </head>
 <body>
 <div class="cal-app animate-in">
@@ -510,8 +512,18 @@
 
   <div class="popup-backdrop" id="popupBackdrop" style="display:none" onclick="closePopup()"></div>
   <div class="entry-popup" id="entryPopup" style="display:none">
-    <div class="entry-popup-title" id="popupTitle">Nueva entrada</div>
-    <textarea id="popupTaskNameEdit" style="display:none" maxlength="120" placeholder="Nombre de la tarea" rows="1"></textarea>
+   <div class="pop-body">
+    <div class="pop-head">
+      <span class="pop-dot" id="popupDot"></span>
+      <div class="pop-head-main">
+        <div class="entry-popup-title" id="popupTitle">Nueva entrada</div>
+        <textarea id="popupTaskNameEdit" style="display:none" maxlength="120" placeholder="Nombre de la tarea" rows="1"></textarea>
+        <div class="pop-meta" id="popupMeta"></div>
+      </div>
+      <button class="pop-close" type="button" onclick="closePopup()" title="Cerrar (Esc)">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
 
     <div id="popupTaskPicker">
       <div class="tp-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -543,7 +555,11 @@
       </div>
     </div>
 
-    <div class="popup-quick-actions" id="popupQuickActions"></div>
+    <div class="popup-time-row">
+      <label class="pop-time"><span>Empieza</span><input type="time" id="popupStart"></label>
+      <svg class="pop-time-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      <label class="pop-time"><span>Acaba</span><input type="time" id="popupEnd" placeholder="en curso"></label>
+    </div>
 
     <div class="popup-sub-row" id="popupSubRow" style="display:none">
       <select id="popupSubSelect"></select>
@@ -558,17 +574,13 @@
       </button>
     </div>
 
-    <div class="popup-time-row">
-      <input type="time" id="popupStart">
-      <span style="color:var(--text2);font-size:12px">→</span>
-      <input type="time" id="popupEnd" placeholder="en curso">
+    <textarea id="popupNote" placeholder="Nota de esta sesión (opcional)" maxlength="500" rows="2"></textarea>
+
+    <div id="popupTaskMemo" class="task-memo-chip" style="display:none">
+      <strong>Nota fija</strong> <span id="popupTaskMemoText"></span>
     </div>
 
-        <div id="popupTaskMemo" class="task-memo-chip" style="display:none;margin-bottom:2px">
-      <strong style="color:var(--accent)">Nota fija:</strong> <span id="popupTaskMemoText"></span>
-    </div>
-
-    <textarea id="popupNote" placeholder="Nota de esta sesión (opcional). La nota fija de la tarea se edita en Tareas." maxlength="500" rows="2"></textarea>
+    <div class="popup-quick-actions" id="popupQuickActions"></div>
 
     <div class="entry-popup-actions">
       <button class="btn-danger" id="popupDeleteBtn" style="display:none" onclick="deletePopupEntry()">Eliminar</button>
@@ -576,6 +588,7 @@
       <button class="btn-ghost" onclick="closePopup()">Cancelar</button>
       <button class="btn-primary" onclick="savePopup()">Guardar</button>
     </div>
+   </div>
   </div>
 
   <!-- Popup de confirmación con el estilo de la app (sustituye a confirm() nativo) -->
@@ -650,6 +663,9 @@
 </div>
 
 <script src="shared.js"></script>
+<script src="glass.js"></script>
+<script src="bocadillo.js"></script>
+<script src="radial.js"></script>
 <script src="calendar-dnd.js"></script>
 <script>
 const { ipcRenderer, shell } = require('electron');
@@ -687,7 +703,8 @@ function findEntryIndex(task, origStartMs, fallbackIdx) {
 
 const calDnD = createCalendarDnD({
   getRowH: () => ROW_H,
-  snapHour,
+  // Alargar, acortar y mover van de 5 en 5 minutos (crear arrastrando, de cuarto en cuarto).
+  snapHour: (h) => Math.round(h * 12) / 12,
   clamp,
   startOfDay,
   sameDay,
@@ -699,8 +716,14 @@ const calDnD = createCalendarDnD({
   ipcRenderer,
   getCurrentState: () => currentState,
   getHiddenTaskIds: () => hiddenTaskIds,
-  openEditPopup: (...args) => openEditPopup(...args),
-  isPopupOpen: () => !!popupMode,
+  onBlockClick: (...args) => onBlockClick(...args),
+  getPasteTarget: () => destinoPegado(),
+  onPasted: (info) => onPasted(info),
+  onCopied: (clip) => {
+    toast(`Copiado · ${clip.nameAtTime}${clip.subNameAtTime ? ' · ' + clip.subNameAtTime : ''}`, 'copiar');
+    pintarCursorPegado();
+  },
+  isPopupOpen: () => !!popupMode || RadialMenu.isOpen(),
   onInteractionEnd: () => { lastResizeEnd = Date.now(); },
   setBusyFlag: (busy) => {
     calDnDBusy = !!busy;
@@ -771,11 +794,13 @@ ipcRenderer.on('state', (_, state) => {
     // Tick de tarea en curso: actualizar bloques running sin reconstruir la rejilla.
     updateRunningBlocksLive();
     renderDayTotals();
+    pintarTotalesDia();
     renderMiniCal();
   } else {
     renderAll();
   }
   refrescarFilaSubtarea();
+  asignarSubtareaPendiente();
   if (firstLoad) scrollToNow();
   maybeStartTutorial();
 });
@@ -835,19 +860,54 @@ function renderTotalsInto(listId, totals, vacio) {
     item.innerHTML = `
       <div class="legend-dot" style="background:${task.color}" title="Cambiar color"></div>
       <span class="legend-name">${task.name}${task.deleted ? ' <span class="legend-deleted-tag">(eliminada)</span>' : ''}</span>
-      <span class="day-total-time">${formatDur(secs * 1000)}</span>`;
+      <span class="day-total-time" title="Clic: en horas o en decimales">${fmtHoras(secs * 1000)}</span>`;
     item.onclick = () => {
       if (oculta) hiddenTaskIds.delete(task.id); else hiddenTaskIds.add(task.id);
       renderDayTotals(); renderWeek();
     };
-    // El punto de color va aparte: cambia el color en vez de mostrar/ocultar.
+    // El punto de color va aparte: cambia el color en vez de mostrar/ocultar. Y el tiempo,
+    // el formato de las horas.
     item.querySelector('.legend-dot').onclick = (e) => { e.stopPropagation(); abrirColorTarea(task); };
+    item.querySelector('.day-total-time').onclick = alternarFormatoHoras;
     list.appendChild(item);
   });
   const suma = document.createElement('div');
   suma.className = 'totals-sum';
-  suma.innerHTML = `<span>Total</span><span class="day-total-time">${formatDur(total * 1000)}</span>`;
+  suma.innerHTML = `<span>Total</span><span class="day-total-time" title="Clic: en horas o en decimales">${fmtHoras(total * 1000)}</span>`;
+  suma.querySelector('.day-total-time').onclick = alternarFormatoHoras;
   list.appendChild(suma);
+}
+
+// ---------- Horas: «6h 30m» o en decimales («6,5 h») ----------
+// Un clic en cualquier total (cabecera de cada día o barra lateral) cambia el formato, que
+// se recuerda: para imputar suelen pedirse en decimales.
+let horasDecimales = false;
+try { horasDecimales = localStorage.getItem('imputa.horasDecimales') === '1'; } catch {}
+
+function fmtHoras(ms) {
+  if (!horasDecimales) return formatDur(ms);
+  const h = Math.max(0, ms) / 3600000;
+  return h.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' h';
+}
+
+function alternarFormatoHoras(e) {
+  if (e) e.stopPropagation();
+  horasDecimales = !horasDecimales;
+  try { localStorage.setItem('imputa.horasDecimales', horasDecimales ? '1' : '0'); } catch {}
+  renderDayTotals();
+  pintarTotalesDia();
+}
+
+// Total de cada día visible, debajo de su nombre en la cabecera.
+function pintarTotalesDia() {
+  document.querySelectorAll('#weekHeader .day-header').forEach(h => {
+    const el = h.querySelector('.dh-total');
+    if (!el || !h._date) return;
+    const ini = startOfDay(h._date).getTime();
+    const ms = totalsForRange(ini, ini + 86400000).reduce((s, x) => s + x.secs, 0) * 1000;
+    el.textContent = ms >= 60000 ? fmtHoras(ms) : '—';
+    el.classList.toggle('vacio', ms < 60000);
+  });
 }
 
 async function abrirImpute() {
@@ -1204,10 +1264,13 @@ function renderWeek() {
     const isToday = sameDay(date, today0);
     const isSelected = selectedDate && sameDay(date, selectedDate);
     el.className = 'day-header' + (isToday?' today':'') + (isSelected?' selected':'');
-    el.innerHTML = `<span class="dh-num">${date.getDate()}</span>${DOW_LONG[(date.getDay()+6)%7]}`;
+    el.innerHTML = `<span class="dh-num">${date.getDate()}</span>${DOW_LONG[(date.getDay()+6)%7]}<span class="dh-total" title="Horas del día · clic: en horas o en decimales"></span>`;
+    el._date = date;
     el.onclick = () => { selectedDate = startOfDay(date); renderMiniCal(); renderDayTotals(); renderWeek(); };
+    el.querySelector('.dh-total').onclick = alternarFormatoHoras;
     header.appendChild(el);
   });
+  pintarTotalesDia();
 
   const gutter = document.getElementById('hourGutter');
   gutter.innerHTML = '';
@@ -1234,6 +1297,11 @@ function renderWeek() {
     gridBody.appendChild(col);
   });
   weekGridBuilt = true;
+  if (recienPegada && (recienPegada.hecha || Date.now() - recienPegada.t > 3000)) recienPegada = null;
+  // Lo que no es parte del estado (el cursor de pegado y el borrador de una entrada nueva)
+  // se vuelve a poner en la columna recién creada.
+  pintarCursorPegado();
+  pintarBorrador();
 }
 
 // Actualiza altura/etiqueta de bloques en curso sin reconstruir la semana.
@@ -1251,9 +1319,10 @@ function updateRunningBlocksLive() {
     const blockH = Math.max(6, (endH - startH) * ROW_H - 2);
     block.style.top = (startH * ROW_H) + 'px';
     block.style.height = blockH + 'px';
-    if (blockH < 30) { block.classList.add('mini'); block.classList.remove('corto'); }
-    else if (blockH < 58) { block.classList.add('corto'); block.classList.remove('mini'); }
-    else { block.classList.remove('mini', 'corto'); }
+    block.classList.remove('mini', 'corto', 'medio');
+    if (blockH < 30) block.classList.add('mini');
+    else if (blockH < 58) block.classList.add('corto');
+    else if (blockH < 86) block.classList.add('medio');
     const durEl = block.querySelector('.tb-time-dur');
     if (durEl) durEl.textContent = formatDur(now - startMs);
     const rangeEl = block.querySelector('.tb-time-range');
@@ -1316,8 +1385,16 @@ function renderDayEntries(col, date) {
       // quitando cosas en vez de dejar que se recorten a medias.
       if (blockH < 30) block.classList.add('mini');
       else if (blockH < 58) block.classList.add('corto');
-      block.style.background = task.color;
-      block.style.color = contrastTextColor(task.color);
+      else if (blockH < 86) block.classList.add('medio');   // el nombre, en una línea
+      // 2.8: bloque macizo del color de la tarea, con el texto que más contraste (ver tonoBloque).
+      const tono = tonoBloque(task.color);
+      block.style.setProperty('--c', task.color);
+      block.style.setProperty('--blk', tono.fondo);
+      block.style.setProperty('--blk-txt', tono.texto);
+      if (recienPegada && recienPegada.taskId === task.id && Math.abs(recienPegada.startMs - entry.start) < 1000) {
+        block.classList.add('recien');
+        recienPegada.hecha = true;
+      }
       // El nombre que se ve es el que tenía la tarea CUANDO SE HIZO esta entrada
       // (entry.nameAtTime), no el actual: si luego renombras la tarea, el calendario
       // ya hecho no cambia solo.
@@ -1341,15 +1418,14 @@ function renderDayEntries(col, date) {
       block.dataset.startMs = String(entry.start);
       block.dataset.entryIndex = String(idx);
       calDnD.applySelectedClass(block, task.id, entry.start);
-      // Clic / arrastre: attachMoveHandlers decide (umbral → move; si no, popup).
+      // Clic / arrastre: attachMoveHandlers decide (umbral → mover; si no, seleccionar).
       calDnD.attachMoveHandlers(block, task, idx, entry, col);
-      // Clic derecho: el menú lo monta el proceso principal, que es quien tiene la
-      // lista de secciones (nativo, así se pinta por encima de la rejilla sin líos).
+      // 2.8: clic derecho → menú circular (antes, el menú nativo de Windows).
       block.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         calDnD.markSelected(block, task.id, entry.start);
-        ipcRenderer.send('action', { type: 'calendar-context-menu', payload: { taskId: task.id, entryIndex: idx } });
+        abrirMenuEntrada(ev, task, idx, entry, block);
       });
 
       // Los tiradores siempre se pueden usar, incluso en entradas cortas: por debajo de
@@ -1378,6 +1454,26 @@ function renderDayEntries(col, date) {
     });
   });
 }
+
+// Relleno y texto de un bloque: el color de la tarea casi puro (templado un pelo con el
+// fondo del tema para que no deslumbre) y, encima, blanco o casi negro: el que tenga más
+// contraste de verdad (luminancia relativa, como mide la WCAG), no a ojo.
+function tonoBloque(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return { fondo: hex || '#8b8b8b', texto: '#ffffff' };
+  const claro = document.documentElement.dataset.scheme === 'light';
+  const base = claro ? [255, 255, 255] : [26, 21, 24];
+  const k = claro ? 0.9 : 0.8;   // cuánto color de la tarea lleva el relleno
+  const n = parseInt(m[1], 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v, i) => Math.round(v * k + base[i] * (1 - k)));
+  const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+  const OSCURO = '#1d1a1c', L_OSCURO = 0.0113;
+  const contraBlanco = 1.05 / (L + 0.05), contraOscuro = (L + 0.05) / (L_OSCURO + 0.05);
+  return { fondo: `rgb(${c.join(',')})`, texto: contraBlanco >= contraOscuro ? '#ffffff' : OSCURO };
+}
+// Al cambiar de tema cambia el templado: se repinta la rejilla.
+window.addEventListener('theme-change', () => { if (weekGridBuilt) renderWeek(); });
 
 // Hasta dónde se puede estirar una entrada sin pisar a las de al lado: devuelve el fin
 // de la entrada anterior y el inicio de la siguiente. Así el borde hace tope y, si se
@@ -1418,38 +1514,57 @@ function scrollToNow() {
   el.scrollTop = Math.max(0, (h-2)*ROW_H);
 }
 
-// ---------- Drag to create ----------
+// ---------- Huecos: clic, doble clic y arrastrar para crear ----------
+// 2.8: un clic en un hueco deja ahí el cursor de pegado (y quita la selección); doble clic
+// crea una entrada de media hora; arrastrar dibuja la entrada nueva. Con el botón derecho,
+// el menú circular del hueco.
+let ultimoClicHueco = null;
+
+function horaEn(col, clientY) {
+  const rect = col.getBoundingClientRect();
+  return snapHour(clamp((clientY - rect.top) / ROW_H, 0, 24));
+}
+
 function attachDragHandlers(col) {
   col.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.task-block')) return;
+    if (e.button !== 0) return;
+    if (e.target.closest('.task-block, .paste-caret')) return;
     if (calDnDBusy || moveState || resizeState) return;
-    const rect = col.getBoundingClientRect();
-    const startHour = snapHour(clamp((e.clientY - rect.top) / ROW_H, 0, 24));
-    const ghost = document.createElement('div');
-    ghost.className = 'task-block ghost';
-    ghost.style.top = (startHour*ROW_H)+'px';
-    ghost.style.height = '4px';
-    col.appendChild(ghost);
-    const label = document.createElement('div');
-    label.className = 'drag-time-label';
-    label.style.top = (startHour*ROW_H - 26)+'px';
-    label.textContent = `${hourToHHMM(startHour)} – ${hourToHHMM(startHour)}`;
-    col.appendChild(label);
-    dragState = { col, date: col._date, startHour, curHour: startHour, ghost, label };
+    calDnD.clearSelected();
+    const startHour = horaEn(col, e.clientY);
+    dragState = { col, date: col._date, startHour, curHour: startHour, ghost: null, label: null, x0: e.clientX, y0: e.clientY, movido: false };
     document.addEventListener('mousemove', onDragMove);
     document.addEventListener('mouseup', onDragEnd);
+  });
+  col.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('.task-block')) return;
+    e.preventDefault();
+    calDnD.clearSelected();
+    abrirMenuHueco(e, col, horaEn(col, e.clientY));
   });
 }
 
 function onDragMove(e) {
   if (!dragState) return;
-  const rect = dragState.col.getBoundingClientRect();
-  dragState.curHour = snapHour(clamp((e.clientY - rect.top) / ROW_H, 0, 24));
+  if (!dragState.movido) {
+    // Hasta que no se mueve un poco es un clic, no un arrastre.
+    if (Math.abs(e.clientY - dragState.y0) < 6 && Math.abs(e.clientX - dragState.x0) < 6) return;
+    dragState.movido = true;
+    quitarCursorPegado();
+    const ghost = document.createElement('div');
+    ghost.className = 'task-block ghost';
+    dragState.col.appendChild(ghost);
+    const label = document.createElement('div');
+    label.className = 'drag-time-label';
+    dragState.col.appendChild(label);
+    dragState.ghost = ghost; dragState.label = label;
+  }
+  dragState.curHour = horaEn(dragState.col, e.clientY);
   const lo = Math.min(dragState.startHour, dragState.curHour);
   const hi = Math.max(dragState.startHour, dragState.curHour);
   dragState.ghost.style.top = (lo*ROW_H)+'px';
   dragState.ghost.style.height = Math.max(4,(hi-lo)*ROW_H)+'px';
-  dragState.label.style.top = (lo*ROW_H - 26)+'px';
+  dragState.label.style.top = (lo*ROW_H - 30)+'px';
   dragState.label.textContent = `${hourToHHMM(lo)} – ${hourToHHMM(hi)}`;
 }
 
@@ -1457,13 +1572,367 @@ function onDragEnd() {
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mouseup', onDragEnd);
   if (!dragState) return;
-  let lo = Math.min(dragState.startHour, dragState.curHour);
-  let hi = Math.max(dragState.startHour, dragState.curHour);
-  if (hi - lo < 0.25) { hi = Math.min(24, lo + 0.5); lo = Math.max(0, hi - 0.5); }
-  dragState.ghost.remove();
-  dragState.label.remove();
-  openCreatePopup(dragState.date, lo, hi);
+  const ds = dragState;
   dragState = null;
+  if (!ds.movido) {
+    const ahora = Date.now();
+    const doble = ultimoClicHueco && ahora - ultimoClicHueco.t < 450 && ultimoClicHueco.col === ds.col
+      && Math.abs(ultimoClicHueco.hour - ds.startHour) <= 0.25;
+    ultimoClicHueco = doble ? null : { t: ahora, col: ds.col, hour: ds.startHour };
+    if (doble) {
+      quitarCursorPegado();
+      const lo = Math.min(ds.startHour, 23.5);
+      abrirNuevaEntrada(ds.date, lo, lo + 0.5);
+    } else {
+      ponerCursorPegado(ds.date, ds.startHour);
+    }
+    return;
+  }
+  let lo = Math.min(ds.startHour, ds.curHour);
+  let hi = Math.max(ds.startHour, ds.curHour);
+  if (hi - lo < 0.25) { hi = Math.min(24, lo + 0.5); lo = Math.max(0, hi - 0.5); }
+  ds.ghost.remove();
+  ds.label.remove();
+  abrirNuevaEntrada(ds.date, lo, hi);
+}
+
+// ---------- Borrador de la entrada nueva ----------
+// Mientras el bocadillo de "Nueva entrada" está abierto, en la rejilla se ve dónde va a
+// quedar (y el bocadillo le apunta con la gotita). Sigue al cambiar las horas.
+let borrador = null;   // { date, lo, hi }
+
+function abrirNuevaEntrada(date, lo, hi) {
+  borrador = { date: startOfDay(date), lo, hi };
+  openCreatePopup(date, lo, hi);
+}
+
+// Al cambiar las horas en el bocadillo, el borrador de la rejilla se mueve con ellas.
+function moverBorradorDesdeHoras() {
+  if (popupMode !== 'create' || !borrador) return;
+  const a = document.getElementById('popupStart').value, b = document.getElementById('popupEnd').value;
+  if (!a) return;
+  const lo = hhmmToHour(a);
+  const hi = b ? hhmmToHour(b) : lo + 0.5;
+  if (!(hi > lo)) return;
+  borrador.lo = lo; borrador.hi = hi;
+  pintarCabeceraPopup(null, null, borrador.date, lo, hi);
+  reapuntarPopup(pintarBorrador());
+}
+document.getElementById('popupStart').addEventListener('input', moverBorradorDesdeHoras);
+document.getElementById('popupEnd').addEventListener('input', moverBorradorDesdeHoras);
+
+function colDe(date) {
+  return Array.from(document.querySelectorAll('#gridBody .day-col')).find(c => c._date && sameDay(c._date, date)) || null;
+}
+
+function pintarBorrador() {
+  document.querySelectorAll('.task-block.borrador').forEach(el => el.remove());
+  if (!borrador || popupMode !== 'create') return null;
+  const col = colDe(borrador.date);
+  if (!col) return null;
+  const el = document.createElement('div');
+  el.className = 'task-block ghost borrador';
+  el.style.top = (borrador.lo * ROW_H) + 'px';
+  el.style.height = Math.max(6, (borrador.hi - borrador.lo) * ROW_H - 2) + 'px';
+  const tarea = (currentState.tasks || []).find(t => t.id === popupSelectedTaskId);
+  if (tarea) el.style.setProperty('--c', tarea.color);
+  el.innerHTML = `<div class="tb-name"></div><div class="tb-time"><span class="tb-time-range">${hourToHHMM(borrador.lo)} - ${hourToHHMM(borrador.hi)}</span></div>`;
+  el.querySelector('.tb-name').textContent = tarea ? tarea.name : 'Nueva entrada';
+  col.appendChild(el);
+  return el;
+}
+
+function quitarBorrador() {
+  borrador = null;
+  document.querySelectorAll('.task-block.borrador').forEach(el => el.remove());
+}
+
+// ---------- Cursor de pegado ----------
+// Donde hiciste clic en un hueco: Ctrl+V pega ahí. Si hay algo copiado se ve ya en su sitio
+// (con su color y lo que dura), para que no haya sorpresas.
+let cursorPegado = null;   // { date, hour }
+
+function ponerCursorPegado(date, hour) {
+  cursorPegado = { date: startOfDay(date), hour };
+  pintarCursorPegado(true);
+}
+
+function quitarCursorPegado() {
+  cursorPegado = null;
+  document.querySelectorAll('.paste-caret').forEach(el => el.remove());
+}
+
+function destinoPegado() {
+  if (!cursorPegado) return null;
+  const col = colDe(cursorPegado.date);
+  return { dayCol: col || { _date: cursorPegado.date }, hour: cursorPegado.hour };
+}
+
+function pintarCursorPegado(nuevo) {
+  document.querySelectorAll('.paste-caret').forEach(el => el.remove());
+  if (!cursorPegado) return;
+  const col = colDe(cursorPegado.date);
+  if (!col) return;
+  const clip = calDnD.getClipboard();
+  const el = document.createElement('div');
+  el.className = 'paste-caret' + (clip ? ' con-copia' : '') + (nuevo ? ' nuevo' : '');
+  el.style.top = (cursorPegado.hour * ROW_H) + 'px';
+  if (clip) {
+    const dayStart = startOfDay(cursorPegado.date).getTime();
+    const hueco = calDnD.findGap(dayStart, dayStart + cursorPegado.hour * 3600000, clip.durationMs);
+    const ini = hueco ? (hueco.startMs - dayStart) / 3600000 : cursorPegado.hour;
+    const fin = hueco ? (hueco.endMs - dayStart) / 3600000 : cursorPegado.hour + clip.durationMs / 3600000;
+    el.style.top = (ini * ROW_H) + 'px';
+    el.innerHTML = `<div class="pc-preview" style="--c:${clip.color};height:${Math.max(8, (fin - ini) * ROW_H - 2)}px"><span class="pc-name"></span></div>
+      <div class="pc-label"><b>Ctrl+V</b> pegar aquí · ${hourToHHMM(ini)}</div>`;
+    el.querySelector('.pc-name').textContent = clip.nameAtTime + (clip.subNameAtTime ? ' · ' + clip.subNameAtTime : '');
+    if (!hueco) el.classList.add('no-cabe');
+  } else {
+    el.innerHTML = `<div class="pc-label">${hourToHHMM(cursorPegado.hour)}</div>`;
+  }
+  col.appendChild(el);
+}
+
+// Lo que se acaba de pegar brilla un momento al aparecer, y si se pegó en el cursor, el
+// cursor baja detrás (así varios Ctrl+V seguidos se van poniendo uno tras otro).
+let recienPegada = null;
+function onPasted(info) {
+  if (!info) { toast('Ahí no cabe: no hay hueco libre', 'aviso'); return; }
+  recienPegada = { taskId: info.taskId, startMs: info.startMs, t: Date.now() };
+  const clip = calDnD.getClipboard();
+  if (cursorPegado && info.dayCol && info.dayCol._date && sameDay(info.dayCol._date, cursorPegado.date) && clip) {
+    const dayStart = startOfDay(cursorPegado.date).getTime();
+    cursorPegado.hour = Math.min(24, (info.startMs + clip.durationMs - dayStart) / 3600000);
+  }
+  toast(info.recortada ? 'Pegado (recortado para que quepa en el hueco)' : 'Pegado', 'pegar');
+}
+
+// ---------- Clic en una entrada ----------
+let ultimoClicBloque = null;
+function onBlockClick(task, idx, entry, block) {
+  quitarCursorPegado();
+  const key = task.id + '|' + entry.start;
+  const ahora = Date.now();
+  if (ultimoClicBloque && ultimoClicBloque.key === key && ahora - ultimoClicBloque.t < 450) {
+    ultimoClicBloque = null;
+    openEditPopup(task, idx, entry, block);
+    return;
+  }
+  ultimoClicBloque = { key, t: ahora };
+}
+
+function bloqueDe(taskId, startMs) {
+  return document.querySelector(`.task-block[data-task-id="${CSS.escape(String(taskId))}"][data-start-ms="${startMs}"]`);
+}
+
+// ---------- Teclado ----------
+// Ctrl+C / Ctrl+V / Ctrl+D están en calendar-dnd.js. Aquí: Supr borra (preguntando), Intro
+// abre los detalles y Esc suelta la selección y el cursor de pegado.
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
+  if (RadialMenu.isOpen()) return;
+  if (popupMode) {
+    if (e.key === 'Escape' && !document.querySelector('.ask-backdrop')) { e.preventDefault(); closePopup(); }
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const sel = calDnD.selectedEntry();
+  if (e.key === 'Escape') {
+    calDnD.clearSelected(); quitarCursorPegado();
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && sel) {
+    e.preventDefault();
+    confirmarEliminarEntrada(sel.task, sel.idx);
+  } else if (e.key === 'Enter' && sel) {
+    e.preventDefault();
+    openEditPopup(sel.task, sel.idx, sel.entry, sel.block);
+  }
+});
+
+function confirmarEliminarEntrada(task, idx) {
+  const entry = task.entries[idx];
+  if (!entry) return;
+  const nombre = (entry.nameAtTime || task.name) + (entry.subNameAtTime ? ` · ${entry.subNameAtTime}` : '');
+  showConfirmPopup('Eliminar entrada',
+    `Se borra este rato de "${nombre}" (${timeRangeLabel(entry.start, entry.end)}, ${formatDur((entry.end || Date.now()) - entry.start)}).`,
+    'Eliminar',
+    () => {
+      const actual = (currentState.tasks || []).find(t => t.id === task.id);
+      const i = actual ? findEntryIndex(actual, entry.start, idx) : -1;
+      if (i < 0) return;
+      ipcRenderer.send('action', { type: 'delete-entry', payload: { taskId: task.id, entryIndex: i } });
+      toast('Entrada eliminada', 'borrar');
+    });
+}
+
+// ---------- Avisos cortos ----------
+let toastTimer = null;
+function toast(texto, tipo) {
+  let el = document.getElementById('calToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'calToast';
+    el.className = 'cal-toast';
+    document.body.appendChild(el);
+  }
+  el.dataset.tipo = tipo || '';
+  el.textContent = texto;
+  el.classList.remove('on');
+  void el.offsetWidth;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 1900);
+}
+
+// ---------- Menús circulares (clic derecho) ----------
+const IC = {
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.83 2.83 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1.6"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.6"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z"/></svg>',
+  extend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v5l3 2"/><path d="M20.5 13A8.5 8.5 0 1 1 12 3.5"/><path d="M16 3.5h4.5V8"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="3"/><path d="M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5"/></svg>',
+  dup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="7" rx="2.5"/><rect x="4" y="13.5" width="16" height="7" rx="2.5" stroke-dasharray="3 2.4"/></svg>',
+  paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5H7A2.5 2.5 0 0 0 4.5 7v11A2.5 2.5 0 0 0 7 20.5h10a2.5 2.5 0 0 0 2.5-2.5V7A2.5 2.5 0 0 0 17 4.5h-2"/><rect x="9" y="3" width="6" height="3.5" rx="1.2"/><path d="M12 10.5v6M9 13.5l3 3 3-3"/></svg>',
+  palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.1 0 1.7-.9 1.4-1.9-.3-1.1.4-2.1 1.6-2.1h1.8a3.7 3.7 0 0 0 3.7-3.7C20.5 7.6 16.7 3.5 12 3.5z"/><circle cx="7.6" cy="11.5" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7.6" r="1.2" fill="currentColor"/><circle cx="15.2" cy="8.4" r="1.2" fill="currentColor"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.6l2 2.2H18a2.5 2.5 0 0 1 2.5 2.5v7.8A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2"/><path d="M6.5 7l.9 11.2A2 2 0 0 0 9.4 20h5.2a2 2 0 0 0 2-1.8L17.5 7"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l-4-4 4-4M6 12h10"/></svg>',
+  start: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M10.5 8.8v6.4l5-3.2z" fill="currentColor"/></svg>',
+  sub: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v9a3 3 0 0 0 3 3h11"/><path d="M15 12l4 4-4 4"/></svg>',
+  nota: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-5 4.5V16a1 1 0 0 1-1-1z"/><path d="M8.5 8h7M8.5 11.5h4.5"/></svg>',
+  menos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 12h12"/></svg>',
+  punto: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3.2"/></svg>',
+};
+
+function enviar(type, payload) { ipcRenderer.send('action', { type, payload }); }
+
+function nombreEntrada(task, entry) {
+  return (entry.nameAtTime || task.name) + (entry.subNameAtTime ? ` · ${entry.subNameAtTime}` : '');
+}
+
+function abrirMenuEntrada(ev, task, idx, entry, block) {
+  quitarCursorPegado();
+  const enMarcha = currentState.activeTaskId === task.id;
+  const enCurso = entry.end == null;
+  const sub = entry.subId && (task.subtasks || []).some(x => x.id === entry.subId) ? entry.subId : undefined;
+  const items = [
+    { label: 'Detalles', hint: 'Intro · doble clic', icon: IC.info, run: () => openEditPopup(task, idx, entry, bloqueDe(task.id, entry.start)) },
+  ];
+  if (task.deleted) {
+    items.push({ label: 'Restaurar tarea', icon: IC.undo, tone: 'success', run: () => enviar('restore-task', { taskId: task.id }) });
+  } else if (enMarcha) {
+    items.push({ label: enCurso ? 'Pausar' : 'Pausar la tarea', icon: IC.pause, tone: 'danger', run: () => enviar('pause') });
+  } else {
+    items.push({ label: 'Seguir desde ahora', hint: 'Entrada nueva con la misma nota', icon: IC.play, tone: 'success',
+      run: () => enviar('switch-task', { taskId: task.id, subId: sub, note: entry.note }) });
+    if (!enCurso) items.push({ label: 'Alargar hasta ahora', hint: 'Esta misma, sin cortar', icon: IC.extend, tone: 'accent',
+      run: () => showConfirmPopup('Alargar entrada',
+        'Esta entrada se alarga desde su hora de inicio hasta ahora mismo, en vez de crear una nueva.',
+        'Alargar', () => enviar('resume-entry', { taskId: task.id, entryIndex: idx })) });
+  }
+  items.push(
+    { label: 'Copiar', hint: 'Ctrl+C', icon: IC.copy, run: () => { calDnD.markSelected(bloqueDe(task.id, entry.start), task.id, entry.start); calDnD.copySelected(); } },
+    { label: 'Duplicar', hint: 'Ctrl+D · justo detrás', icon: IC.dup, run: () => { calDnD.markSelected(bloqueDe(task.id, entry.start), task.id, entry.start); calDnD.duplicateSelected(); } },
+  );
+  // Lo de ESTE rato (la sección y el color son de la tarea entera: se ponen en Tareas).
+  if (!task.deleted) {
+    const subs = task.subtasks || [];
+    items.push({
+      label: 'Subtarea', hint: entry.subNameAtTime || 'A qué parte de la tarea fue', icon: IC.sub,
+      sub: () => ({
+        kind: 'list', title: 'Subtarea de este rato',
+        items: [
+          { label: 'Sin subtarea', icon: IC.menos, selected: !entry.subId, run: () => ponerSubtareaEntrada(task, entry, idx, '') },
+          ...subs.map(s => ({ label: s.name, icon: IC.punto, selected: entry.subId === s.id, run: () => ponerSubtareaEntrada(task, entry, idx, s.id) })),
+          { separator: true },
+          { label: 'Subtarea nueva…', icon: IC.plus, run: () => crearSubtareaParaEntrada(task, entry) },
+        ],
+      }),
+    });
+    items.push({ label: entry.note ? 'Cambiar nota' : 'Añadir nota', hint: entry.note || 'Solo de este rato', icon: IC.nota,
+      run: () => editarNotaEntrada(task, entry, idx) });
+  }
+  items.push({ label: 'Eliminar entrada', hint: 'Supr', icon: IC.trash, tone: 'danger', run: () => confirmarEliminarEntrada(task, idx) });
+  RadialMenu.open({
+    x: ev.clientX, y: ev.clientY,
+    title: nombreEntrada(task, entry),
+    subtitle: `${timeRangeLabel(entry.start, entry.end)} · ${formatDur((entry.end || Date.now()) - entry.start)}`,
+    color: task.color,
+    items,
+  });
+}
+
+function abrirMenuHueco(ev, col, hour) {
+  const clip = calDnD.getClipboard();
+  const date = col._date;
+  const items = [
+    { label: 'Nueva entrada aquí', hint: `${hourToHHMM(hour)} · media hora`, icon: IC.plus, tone: 'accent',
+      run: () => abrirNuevaEntrada(date, Math.min(hour, 23.5), Math.min(hour, 23.5) + 0.5) },
+    clip ? { label: 'Pegar aquí', hint: clip.nameAtTime, icon: IC.paste,
+      run: () => { calDnD.pasteAt(col, hour); } } : null,
+    { label: 'Empezar una tarea', hint: 'Desde ahora mismo', icon: IC.start, tone: 'success', run: () => abrirEmpezar() },
+  ];
+  ponerCursorPegado(date, hour);
+  RadialMenu.open({
+    x: ev.clientX, y: ev.clientY,
+    title: `${DOW_LONG[(date.getDay() + 6) % 7]} ${date.getDate()}`,
+    subtitle: hourToHHMM(hour),
+    items,
+  });
+}
+
+// ---------- Subtarea y nota de un rato (desde el menú circular) ----------
+// El índice de la entrada se vuelve a buscar al guardar: entre abrir el menú y elegir puede
+// haber llegado un estado nuevo.
+function indiceActual(task, entry, idx) {
+  const t = (currentState.tasks || []).find(x => x.id === task.id);
+  return t ? findEntryIndex(t, entry.start, idx) : -1;
+}
+
+function ponerSubtareaEntrada(task, entry, idx, subId) {
+  const i = indiceActual(task, entry, idx);
+  if (i < 0) return;
+  enviar('edit-entry', { taskId: task.id, entryIndex: i, subId: subId || '' });
+}
+
+// La subtarea nueva la crea el proceso principal (le pone el id); cuando llega en el
+// siguiente estado se le asigna a este rato (ver el manejador de 'state').
+let subtareaParaEntrada = null;
+async function crearSubtareaParaEntrada(task, entry) {
+  const nombre = await askText({
+    title: 'Subtarea nueva',
+    text: `Se crea dentro de "${task.name}" y se asigna a este rato.`,
+    placeholder: 'Nombre de la subtarea', okLabel: 'Crear', maxLength: 120,
+  });
+  if (nombre === null) return;
+  const n = nombre.trim();
+  if (!n) return;
+  subtareaParaEntrada = { taskId: task.id, start: entry.start, name: n };
+  enviar('add-subtask', { taskId: task.id, name: n });
+}
+function asignarSubtareaPendiente() {
+  const p = subtareaParaEntrada;
+  if (!p || !currentState) return;
+  const t = currentState.tasks.find(x => x.id === p.taskId);
+  const sub = t && (t.subtasks || []).filter(s => s.name === p.name).pop();
+  if (!sub) return;
+  subtareaParaEntrada = null;
+  const i = findEntryIndex(t, p.start, -1);
+  if (i >= 0) enviar('edit-entry', { taskId: t.id, entryIndex: i, subId: sub.id });
+}
+
+async function editarNotaEntrada(task, entry, idx) {
+  const nota = await askText({
+    title: entry.note ? 'Nota de este rato' : 'Añadir una nota',
+    text: 'Solo de este rato; la nota fija de la tarea se cambia en Tareas.',
+    value: entry.note || '', placeholder: '¿Qué hiciste en este rato?', okLabel: 'Guardar', maxLength: 500,
+  });
+  if (nota === null) return;
+  const i = indiceActual(task, entry, idx);
+  if (i < 0) return;
+  enviar('edit-entry', { taskId: task.id, entryIndex: i, note: nota.trim() });
 }
 
 // ---------- Popup ----------
@@ -1494,11 +1963,11 @@ function openCreatePopup(date, startHour, endHour) {
   document.getElementById('popupEnd').value = hourToHHMM(endHour);
   document.getElementById('popupNote').value = '';
   updatePopupTaskMemo((currentState.tasks || []).find(t => t.id === popupSelectedTaskId));
+  pintarCabeceraPopup(null, null, date, startHour, endHour);
 
   buildPopupColorPicker();
-  showPopup();
-  autoGrowTextarea(document.getElementById('popupNote'));
-  document.getElementById('popupTaskSearch').focus();
+  if (!borrador || !sameDay(borrador.date, date)) borrador = { date: startOfDay(date), lo: startHour, hi: endHour };
+  showPopup(pintarBorrador(), () => document.getElementById('popupTaskSearch').focus());
 }
 
 // Cuándo se usó una tarea por última vez (marca de la última entrada). Sirve para poner
@@ -1611,9 +2080,12 @@ function updatePopupTaskMemo(task) {
   }
 }
 
-function openEditPopup(task, entryIndex, entry) {
+function openEditPopup(task, entryIndex, entry, ancla) {
+  quitarBorrador();
   popupMode = 'edit';
   popupCtx = { task, entryIndex, date: startOfDay(new Date(entry.start)) };
+  if (!ancla || !ancla.isConnected) ancla = bloqueDe(task.id, entry.start);
+  if (ancla) calDnD.markSelected(ancla, task.id, entry.start);
   const entryName = entry.nameAtTime || task.name;
   // El nombre que se edita aquí es el de ESTA entrada (como la nota): corrige cómo
   // quedó registrada, sin tocar la tarea ni el resto de su historial. Para cambiar
@@ -1648,8 +2120,26 @@ function openEditPopup(task, entryIndex, entry) {
   updatePopupTaskMemo(task);
   renderPopupSubtasks(task, entry);
   renderPopupQuickActions(task, entryIndex, entry);
-  showPopup();
-  autoGrowPopupFields();
+  pintarCabeceraPopup(task, entry, popupCtx.date);
+  showPopup(ancla);
+}
+
+// Cabecera del bocadillo: el punto de color de la tarea y, debajo del nombre, qué día es y
+// cuánto dura.
+function pintarCabeceraPopup(task, entry, date, lo, hi) {
+  const dot = document.getElementById('popupDot');
+  const meta = document.getElementById('popupMeta');
+  const d = startOfDay(date);
+  const dia = `${DOW_LONG[(d.getDay() + 6) % 7]} ${d.getDate()} de ${MONTHS[d.getMonth()].toLowerCase()}`;
+  if (task && entry) {
+    dot.style.setProperty('--c', task.color);
+    const dur = formatDur((entry.end || Date.now()) - entry.start);
+    meta.textContent = `${dia} · ${dur}${entry.end == null ? ' · en curso' : ''}`;
+  } else {
+    const t = (currentState.tasks || []).find(x => x.id === popupSelectedTaskId);
+    dot.style.setProperty('--c', t ? t.color : 'var(--accent2)');
+    meta.textContent = lo != null ? `${dia} · ${formatDur((hi - lo) * 3600000)}` : dia;
+  }
 }
 
 // ---------- Subtarea de la entrada ----------
@@ -1915,6 +2405,11 @@ function onPopupTaskChange() {
   document.getElementById('popupNewTaskFields').style.display = isNew ? 'flex' : 'none';
   const manualColors = currentState.settings && currentState.settings.colorMode === 'manual';
   document.getElementById('popupColorSection').style.display = manualColors ? '' : 'none';
+  // El borrador de la rejilla y el punto de la cabecera toman el color de la tarea elegida.
+  if (popupMode === 'create' && borrador) {
+    pintarCabeceraPopup(null, null, borrador.date, borrador.lo, borrador.hi);
+    pintarBorrador();
+  }
 }
 
 // La tarea nueva puede nacer ya dentro de una sección, igual que desde "Empezar una
@@ -1949,14 +2444,31 @@ function buildPopupColorPicker() {
   });
 }
 
-function showPopup() {
+// ---------- Bocadillo anclado (2.8) ----------
+// El popup de una entrada ya no sale en el centro tapándolo todo: sale al lado de su
+// bloque (o del borrador, si es nueva), con una gotita que le apunta y cristal líquido de
+// fondo (ver bocadillo.js).
+const bocadilloEntrada = Bocadillo.crear(document.getElementById('entryPopup'));
+
+function showPopup(ancla, alMostrar) {
   document.getElementById('popupBackdrop').style.display = 'block';
-  document.getElementById('entryPopup').style.display = 'flex';
+  const pop = document.getElementById('entryPopup');
+  // Los textos que crecen solos se miden antes de colocarlo (si no, el cristal se queda
+  // corto): para medir tiene que estar ya maquetado, aunque todavía invisible.
+  pop.classList.add('pop', 'preparando');
+  pop.style.display = 'flex';
+  autoGrowPopupFields();
+  bocadilloEntrada.abrir(ancla, alMostrar);
 }
+
+// La gotita sigue al borrador cuando cambian las horas (el bocadillo no se mueve).
+function reapuntarPopup(ancla) { bocadilloEntrada.reapuntar(ancla); }
+
 function closePopup() {
   document.getElementById('popupBackdrop').style.display = 'none';
-  document.getElementById('entryPopup').style.display = 'none';
+  bocadilloEntrada.cerrar();
   popupMode = null; popupCtx = null;
+  quitarBorrador();
   // El popup tapaba el bloque bajo el ratón: al cerrarse, el navegador tarda en darse
   // cuenta de que ya no está "encima" de nada, así que el próximo refresco no debe
   // saltarse por eso (si no, al borrar/editar una entrada no desaparecía/actualizaba

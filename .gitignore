@@ -17,3 +17,6 @@ Thumbs.db
 
 # Config local del editor / Claude
 .claude/settings.local.json
+
+# Maquetas de diseño de las sesiones (superpowers)
+.superpowers/

@@ -26,11 +26,14 @@
       ipcRenderer,
       getCurrentState,
       getHiddenTaskIds,
-      openEditPopup,
+      onBlockClick,
       isPopupOpen,
       onInteractionEnd,
       setBusyFlag,
       getDayCols,
+      getPasteTarget,
+      onPasted,
+      onCopied,
     } = api;
 
     let resizeState = null;
@@ -262,8 +265,7 @@
           if (!ghost) {
             ghost = document.createElement('div');
             ghost.className = 'task-block move-ghost';
-            ghost.style.background = task.color;
-            ghost.style.color = block.style.color;
+            ['--c', '--blk', '--blk-txt'].forEach((v) => ghost.style.setProperty(v, block.style.getPropertyValue(v)));
             ghost.innerHTML = block.querySelector('.tb-name')
               ? `<div class="tb-name">${block.querySelector('.tb-name').textContent}</div>`
               : '';
@@ -407,9 +409,10 @@
           notifyBusy();
 
           if (!wasArmed) {
-            // Clic simple → popup (si no venimos de un resize reciente)
+            // 2.8: un clic solo selecciona (para copiar, pegar, borrar…); el doble clic abre
+            // los detalles. Lo decide calendar.html. Nada si venimos de un resize reciente.
             if (Date.now() < suppressClickUntil) return;
-            openEditPopup(task, idx, entry);
+            if (commit && onBlockClick) onBlockClick(task, idx, entry, block);
             return;
           }
 
@@ -503,28 +506,94 @@
       return entryClipboard;
     }
 
+    // Primer hueco libre del día a partir de startMs donde quepa la entrada: si cae encima
+    // de otra, se corre hasta justo después; si no cabe entera antes de la siguiente, se
+    // acorta (con un mínimo de 5 min). Devuelve null si no hay sitio.
+    function findGap(dayStart, startMs, durMs) {
+      const dayEnd = dayStart + 86400000;
+      const hidden = getHiddenTaskIds ? getHiddenTaskIds() : new Set();
+      const state = getCurrentState();
+      const ocupados = [];
+      (state && state.tasks || []).forEach((t) => {
+        if (hidden.has(t.id)) return;
+        t.entries.forEach((en) => {
+          const s = en.start, e = en.end || Date.now();
+          if (e > dayStart && s < dayEnd) ocupados.push([s, e]);
+        });
+      });
+      ocupados.sort((a, b) => a[0] - b[0]);
+      let ini = Math.max(dayStart, startMs);
+      for (let vuelta = 0; vuelta < ocupados.length + 1; vuelta++) {
+        const pisa = ocupados.find(([s, e]) => s <= ini && e > ini);
+        if (!pisa) break;
+        ini = pisa[1];
+      }
+      if (ini >= dayEnd - MIN_DUR_MS) return null;
+      const siguiente = ocupados.find(([s]) => s > ini);
+      const tope = Math.min(dayEnd, siguiente ? siguiente[0] : dayEnd);
+      const fin = Math.min(ini + durMs, tope);
+      if (fin - ini < MIN_DUR_MS) return null;
+      return { startMs: ini, endMs: fin, recortada: fin - ini < durMs };
+    }
+
     function pasteAt(dayCol, hour) {
       if (!entryClipboard || !dayCol || !dayCol._date) return false;
       const dayStart = startOfDay(dayCol._date).getTime();
-      let startH = snapHour(clamp(hour, 0, 24));
-      let startMs = dayStart + startH * 3600000;
-      let endMs = startMs + entryClipboard.durationMs;
-      const dayEnd = dayStart + 86400000;
-      if (endMs > dayEnd) {
-        endMs = dayEnd;
-        startMs = Math.max(dayStart, endMs - entryClipboard.durationMs);
-      }
+      const startH = snapHour(clamp(hour, 0, 24));
+      const hueco = findGap(dayStart, dayStart + startH * 3600000, entryClipboard.durationMs);
+      if (!hueco) { onPasted && onPasted(null); return false; }
       ipcRenderer.send('action', {
         type: 'add-calendar-entry',
         payload: {
           taskId: entryClipboard.taskId,
-          startMs,
-          endMs,
+          startMs: hueco.startMs,
+          endMs: hueco.endMs,
           note: entryClipboard.note || undefined,
           subId: entryClipboard.subId || undefined,
         },
       });
+      onPasted && onPasted({ taskId: entryClipboard.taskId, startMs: hueco.startMs, recortada: hueco.recortada, dayCol });
       return true;
+    }
+
+    function selectedEntry() {
+      const sel = document.querySelector('.task-block.selected');
+      if (!sel) return null;
+      const taskId = sel.dataset.taskId;
+      const startMs = Number(sel.dataset.startMs);
+      const state = getCurrentState();
+      const task = state && state.tasks.find((t) => t.id === taskId);
+      if (!task) return null;
+      const idx = task.entries.findIndex((en) => en.start === startMs);
+      if (idx < 0) return null;
+      return { task, idx, entry: task.entries[idx], block: sel };
+    }
+
+    function copySelected() {
+      const s = selectedEntry();
+      if (!s) return false;
+      stashFromBlock(s.task, s.entry);
+      onCopied && onCopied(entryClipboard);
+      return true;
+    }
+
+    // Dónde se pega: donde hiciste clic (el cursor de pegado), o si no justo detrás de la
+    // entrada seleccionada, o si no donde está el ratón.
+    function pasteNow() {
+      if (!entryClipboard) return false;
+      const destino = getPasteTarget && getPasteTarget();
+      if (destino && destino.dayCol) return pasteAt(destino.dayCol, destino.hour);
+      const s = selectedEntry();
+      if (s) {
+        const col = s.block.closest('.day-col');
+        if (col && col._date) {
+          const dayStart = startOfDay(col._date).getTime();
+          return pasteAt(col, ((s.entry.end || Date.now()) - dayStart) / 3600000);
+        }
+      }
+      const col = lastPointer.dayCol || dayColFromPoint(lastPointer.x, lastPointer.y);
+      if (!col) return false;
+      return pasteAt(col, lastPointer.hour);
     }
 
     function installClipboard() {
@@ -542,44 +611,27 @@
 
         const key = (e.key || '').toLowerCase();
         if (key === 'c') {
-          const sel = document.querySelector('.task-block.selected');
-          if (!sel) return;
-          const taskId = sel.dataset.taskId;
-          const startMs = Number(sel.dataset.startMs);
-          const state = getCurrentState();
-          const task = state && state.tasks.find((t) => t.id === taskId);
-          if (!task) return;
-          const entry = task.entries.find((en) => en.start === startMs);
-          if (!entry) return;
-          stashFromBlock(task, entry);
-          e.preventDefault();
+          if (copySelected()) e.preventDefault();
         } else if (key === 'v') {
-          if (!entryClipboard) return;
-          const col = lastPointer.dayCol || dayColFromPoint(lastPointer.x, lastPointer.y);
-          if (!col) return;
-          pasteAt(col, lastPointer.hour);
-          e.preventDefault();
+          if (pasteNow()) e.preventDefault();
+        } else if (key === 'd') {
+          if (duplicateSelected()) e.preventDefault();
         }
       });
     }
 
+    // Duplicar: una copia justo detrás de la seleccionada (sin pasar por el portapapeles).
     function duplicateSelected() {
-      const sel = document.querySelector('.task-block.selected');
-      if (!sel) return false;
-      const taskId = sel.dataset.taskId;
-      const startMs = Number(sel.dataset.startMs);
-      const state = getCurrentState();
-      const task = state && state.tasks.find((t) => t.id === taskId);
-      if (!task) return false;
-      const entry = task.entries.find((en) => en.start === startMs);
-      if (!entry) return false;
-      stashFromBlock(task, entry);
-      const col = sel.closest('.day-col');
+      const s = selectedEntry();
+      if (!s) return false;
+      const col = s.block.closest('.day-col');
       if (!col) return false;
-      // Pegar 15 min más abajo si cabe
+      const previo = entryClipboard;
+      stashFromBlock(s.task, s.entry);
       const dayStart = startOfDay(col._date).getTime();
-      const hour = ((entry.end || (entry.start + entryClipboard.durationMs)) - dayStart) / 3600000;
-      return pasteAt(col, snapHour(clamp(hour, 0, 23.75)));
+      const ok = pasteAt(col, ((s.entry.end || Date.now()) - dayStart) / 3600000);
+      entryClipboard = previo;
+      return ok;
     }
 
     return {
@@ -594,6 +646,11 @@
       applySelectedClass,
       stashFromBlock,
       duplicateSelected,
+      copySelected,
+      pasteNow,
+      pasteAt,
+      findGap,
+      selectedEntry,
       getClipboard: () => entryClipboard,
       forceClearBusy() {
         resizeState = null;

@@ -7,8 +7,12 @@ const path = require('path');
 
 const raiz = process.argv[2] || '.';
 const html = fs.readFileSync(path.join(raiz, 'src/groups.html'), 'utf8');
-const compartido = fs.readFileSync(path.join(raiz, 'src/shared.js'), 'utf8');
-const propio = [...html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join('\n');
+// Todos los <script> de la página en su orden: los de fichero (shared.js, glass.js…) y los
+// escritos dentro, igual que los carga el navegador.
+const codigo = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)].map(m => {
+  const src = /\ssrc="([^"]+)"/.exec(m[1]);
+  return src ? fs.readFileSync(path.join(raiz, 'src', src[1]), 'utf8') : m[2];
+}).join('\n;\n');
 
 // ── DOM de juguete ─────────────────────────────────────────────────────────
 function crearEl(tag = 'div') {
@@ -87,11 +91,13 @@ let fallos = 0;
 for (const esc of escenarios) {
   Object.keys(almacen).forEach(k => delete almacen[k]);
   Object.keys(manejadores).forEach(k => delete manejadores[k]);
-  const sandbox = { document, window, ipcRenderer, require: requireStub, confirm, alert, console,
-                    setTimeout, clearTimeout, setInterval, clearInterval, Date, Math, JSON, Set, Map, Number, String, Array, Object, RegExp, prompt: () => null, URLSearchParams, Promise, Event: class {}, performance, location: { search: '' } };
+  const sandbox = { ...window, document, ipcRenderer, require: requireStub, confirm, alert, console,
+                    setTimeout, clearTimeout, setInterval, clearInterval, Date, Math, JSON, Set, Map, Number, String, Array, Object, RegExp, prompt: () => null, URLSearchParams, Promise, Event: class {}, performance, location: { search: '' },
+                    requestAnimationFrame: (f) => setTimeout(f, 0), cancelAnimationFrame: clearTimeout };
+  sandbox.window = sandbox;   // como en el navegador: window ES el objeto global
   const ctx = require('vm').createContext(sandbox);
   try {
-    require('vm').runInContext(compartido + '\n' + propio, ctx, { filename: 'groups.js' });
+    require('vm').runInContext(codigo, ctx, { filename: 'groups.js' });
     document.getElementById('searchInput').value = '';
     (manejadores.state || []).forEach(fn => fn(null, esc.estado));   // como el IPC real
     const pintado = document.getElementById('groupsList').children.length;

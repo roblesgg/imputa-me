@@ -256,6 +256,8 @@
   .confirm-popup { width:320px;z-index:52; }
   .confirm-popup-text { font-size:13px;color:var(--text2);line-height:1.45;white-space:pre-line; }
 </style>
+<!-- 2.8: estilo «Suave» (rediseño Mac). Va el último para mandar sobre lo de arriba. -->
+<link rel="stylesheet" href="mac.css">
 </head>
 <body>
 <div class="app animate-in">
@@ -456,6 +458,8 @@
 </div>
 
 <script src="shared.js"></script>
+<script src="glass.js"></script>
+<script src="bocadillo.js"></script>
 
   <!-- Editar tarea del panel (nombre / tipo / memo) -->
   <div class="popup-backdrop" id="panelEditBackdrop" style="display:none" onclick="closePanelEdit()"></div>

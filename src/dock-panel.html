@@ -4,25 +4,32 @@
 <meta charset="utf-8">
 <link rel="stylesheet" href="shared.css">
 <style>
-  /* Ventana propia del panel de la barra flotante. Va SIN transparencia y con material
-     acrílico, que es la única forma en Windows de que el sistema desenfoque de verdad lo
-     que hay detrás: con transparent:true el acrílico se ignora y solo queda un tinte.
-     Por eso el panel dejó de vivir dentro de la ventana grande de la barrita (esa sí
-     tiene que ser transparente para dejar pasar los clics al escritorio). */
+  /* Ventana propia del panel de la barra flotante. Desde la 2.8 es TRANSPARENTE y el panel
+     es una tarjeta de esta página: así tiene las esquinas que queramos (con el acrílico de
+     Windows solo podían ser de 8 px y se veían dos esquinas) y todas sus animaciones
+     —entrar, salir, cambiar de pestaña y de ancho— las hace la página. Antes la ventana se
+     desvanecía con setOpacity, que en Windows la deja como ventana "en capas" y a partir
+     de ahí no pintaba las animaciones: por eso las pestañas "se teletransportaban". */
   html, body { width:100%; height:100%; margin:0; overflow:hidden; background:transparent; }
   body { -webkit-app-region:no-drag; }
 
   .panel {
-    position:absolute; inset:0; display:flex; flex-direction:column;
-    background:var(--panel, var(--surface));   /* solo tinte: el desenfoque lo pone el acrílico */
-    border:1px solid var(--border);
+    position:absolute; top:0; bottom:0; display:flex; flex-direction:column;
     overflow:hidden;
+    /* --w-panel: solo mientras se anima un cambio de ancho; si no, llena la ventana. */
+    width:var(--w-panel, 100%);
+    transition:transform .56s cubic-bezier(.32,1.25,.5,1), opacity .3s ease, width .52s cubic-bezier(.32,1.1,.5,1);
   }
-  .s-right  .panel { border-radius:16px 0 0 16px; border-right:none; }
-  .s-left   .panel { border-radius:0 16px 16px 0; border-left:none; }
-  .s-top    .panel { border-radius:0 0 16px 16px; border-top:none; }
-  .s-bottom .panel { border-radius:16px 16px 0 0; border-bottom:none; }
-
+  .panel.sin-anim-ancho { transition:transform .56s cubic-bezier(.32,1.25,.5,1), opacity .3s ease; }
+  .s-right  .panel { right:0; }
+  .s-left   .panel { left:0; }
+  .s-top    .panel, .s-bottom .panel { left:0; right:0; width:auto; }
+  /* Fuera: deslizado hacia su borde y transparente (así se queda mientras está plegado). */
+  .root.fuera .panel { opacity:0; transition:transform .28s cubic-bezier(.4,0,1,1), opacity .24s cubic-bezier(.4,0,1,1); }
+  .s-right.fuera  .panel { transform:translateX(calc(100% + 30px)); }
+  .s-left.fuera   .panel { transform:translateX(calc(-100% - 30px)); }
+  .s-top.fuera    .panel { transform:translateY(calc(-100% - 30px)); }
+  .s-bottom.fuera .panel { transform:translateY(calc(100% + 30px)); }
 
   .resize { position:absolute; z-index:5; }
   .s-right  .resize { top:0; bottom:0; left:0;  width:7px; cursor:ew-resize; }
@@ -31,70 +38,117 @@
   .s-bottom .resize { left:0; right:0; top:0;   height:7px; cursor:ns-resize; }
   .resize:hover { background:var(--accent); opacity:.5; }
 
-  .nav { flex-shrink:0; display:flex; align-items:center; gap:2px; padding:9px 8px; border-bottom:1px solid var(--border); }
+  .nav { flex-shrink:0; display:flex; align-items:center; }
   .nav-btn {
-    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
-    background:transparent; border:none; color:var(--text2); cursor:pointer;
-    padding:8px 3px; border-radius:10px; font-size:var(--font-xs); transition:all .13s;
+    flex:1; display:flex; align-items:center; background:transparent; border:none; color:var(--text2); cursor:pointer;
   }
-  .nav-btn svg { width:18px; height:18px; }
-  .nav-btn:hover { background:var(--bg3); color:var(--text); }
-  .nav-btn.active { background:color-mix(in srgb, var(--accent2) 22%, transparent); color:var(--accent); }
 
   .content { flex:1; min-height:0; position:relative; }
+  /* Una vista por iframe, cargadas una vez y vivas: cambiar de pestaña no recarga nada.
+     Mientras la tarjeta cambia de ancho, las vistas ya tienen su ancho final
+     (--w-contenido) pegadas a su borde, y la tarjeta las va destapando. */
   .content iframe {
-    position:absolute; inset:0; width:100%; height:100%; border:none; background:transparent;
-    opacity:1; transform:none; will-change:transform, opacity;
-    transition:opacity .18s ease, transform .26s cubic-bezier(.32,.72,0,1);
+    position:absolute; top:0; bottom:0; height:100%; width:var(--w-contenido, 100%);
+    border:none; background:transparent;
+    opacity:0; visibility:hidden; pointer-events:none;
+    transform:translateX(var(--from, 26px)) scale(.97);
+    filter:blur(8px);
+    transform-origin:50% 30%;
   }
-  /* Sale hacia el lado del que viene la nueva pestaña y entra desde el contrario. */
-  .content.switching iframe {
-    opacity:0; transform:translateX(var(--slide-out, -14px)) scale(.99);
-    transition:opacity .11s ease-out, transform .11s ease-out;
-    pointer-events:none;   /* invisible no deberia poder pulsarse */
+  .s-right .content iframe { right:0; }
+  .s-left .content iframe, .s-top .content iframe, .s-bottom .content iframe { left:0; }
+  /* Cambio de pestaña "líquido": la que sale se encoge, se corre y se desenfoca; la que
+     entra llega desde su lado con muelle y se enfoca. Con cambio de ancho no se desliza
+     (la tarjeta ya se está moviendo): solo se enfoca. */
+  .content iframe.on {
+    opacity:1; visibility:visible; pointer-events:auto; transform:none; filter:none;
+    transition:opacity .34s cubic-bezier(.22,1,.36,1) .03s, transform .62s cubic-bezier(.34,1.22,.64,1) .03s,
+               filter .4s cubic-bezier(.22,1,.36,1) .03s, visibility 0s;
   }
-  .content.entering iframe { animation:viewIn .3s cubic-bezier(.32,.72,0,1); }
-  @keyframes viewIn {
-    from { opacity:0; transform:translateX(var(--slide-in, 14px)) scale(.985); }
-    to   { opacity:1; transform:none; }
+  .content iframe.saliendo {
+    opacity:0; visibility:visible; pointer-events:none;
+    transform:translateX(var(--to, -22px)) scale(.965); filter:blur(6px);
+    transition:opacity .24s cubic-bezier(.4,0,1,1), transform .34s cubic-bezier(.22,1,.36,1),
+               filter .26s cubic-bezier(.4,0,1,1), visibility 0s linear .34s;
   }
+  .content iframe.enfoque { transform:scale(1.025); filter:blur(12px); }
+  .content iframe.preparada { visibility:visible; }   /* se maqueta y pinta, aún transparente */
+  .content iframe.animando { will-change:transform, opacity, filter; }
+  .content iframe.sin-anim { transition:none !important; }
+</style>
+<!-- 2.8: estilo «Suave» (rediseño Mac). Va el último para mandar sobre lo de arriba. -->
+<link rel="stylesheet" href="mac.css">
+<style>
+  body { background:transparent !important; }
+  /* La tarjeta: mate y maciza (nada de lo de detrás se transparenta), con los brillos
+     cálidos del tema y esquinas bien redondas por el lado de dentro; por el del borde de la
+     pantalla va pegada. Una sola línea de luz en el canto, que sigue la misma curva. */
+  .panel {
+    background:
+      radial-gradient(90% 40% at 0% 0%, var(--glow1), transparent 70%),
+      radial-gradient(80% 40% at 100% 100%, var(--glow2), transparent 72%),
+      var(--surface);
+    border:none;
+  }
+  .s-right  .panel { border-radius:26px 0 0 26px; box-shadow:inset 1px 0 0 rgba(255,255,255,.07); }
+  .s-left   .panel { border-radius:0 26px 26px 0; box-shadow:inset -1px 0 0 rgba(255,255,255,.07); }
+  .s-top    .panel { border-radius:0 0 26px 26px; box-shadow:inset 0 -1px 0 rgba(255,255,255,.07); }
+  .s-bottom .panel { border-radius:26px 26px 0 0; box-shadow:inset 0 1px 0 rgba(255,255,255,.07); }
+  :root[data-scheme="light"] .s-right .panel { box-shadow:inset 1px 0 0 rgba(0,0,0,.06); }
+  :root[data-scheme="light"] .s-left .panel { box-shadow:inset -1px 0 0 rgba(0,0,0,.06); }
+  :root[data-scheme="light"] .s-top .panel { box-shadow:inset 0 -1px 0 rgba(0,0,0,.06); }
+  :root[data-scheme="light"] .s-bottom .panel { box-shadow:inset 0 1px 0 rgba(0,0,0,.06); }
 
-  .nav-btn { position:relative; }
-  .nav-btn.active { animation:navPop .32s cubic-bezier(.34,1.5,.5,1); }
-  @keyframes navPop {
-    0%   { transform:scale(.9); }
-    55%  { transform:scale(1.08); }
-    100% { transform:scale(1); }
+  /* Pestañas: una cápsula con un indicador que se desliza con muelle hasta la elegida. */
+  .nav {
+    position:relative; margin:12px 12px 4px; padding:4px; gap:0; border:none;
+    background:var(--bg2); border-radius:999px;
   }
-  .nav-btn svg { transition:transform .22s cubic-bezier(.34,1.5,.5,1); }
-  .nav-btn:hover svg { transform:translateY(-2px) scale(1.08); }
+  .nav-glider {
+    position:absolute; top:4px; bottom:4px; left:0; width:0; border-radius:999px;
+    background:color-mix(in srgb, var(--accent2) 24%, transparent);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+    transition:transform .5s cubic-bezier(.34,1.4,.64,1), width .5s cubic-bezier(.34,1.4,.64,1);
+    pointer-events:none;
+  }
+  .nav-btn {
+    position:relative; z-index:1; flex-direction:row; justify-content:center; gap:6px;
+    padding:8px 6px; border-radius:999px; font-size:12px; font-weight:600; letter-spacing:-.01em;
+    color:var(--text2); background:transparent !important;
+    transition:color .2s ease;
+  }
+  .nav-btn svg { width:15px; height:15px; transition:transform .4s cubic-bezier(.34,1.56,.64,1); }
+  .nav-btn:hover { color:var(--text); }
+  .nav-btn:hover svg { transform:translateY(-1px) scale(1.06); }
+  .nav-btn.active { color:var(--accent); background:transparent; animation:none; }
+  .nav-btn:active { transform:scale(.95); }
+  .estrecho-nav .nav-btn span { display:none; }
 </style>
 </head>
 <body>
-<div class="root s-right" id="root">
-  <div class="panel">
+<div class="root s-right fuera" id="root">
+  <div class="panel" id="panel">
     <div class="resize" id="resize" title="Arrastra para cambiar el tamaño"></div>
-    <div class="nav">
+    <div class="nav" id="nav">
+      <div class="nav-glider" id="glider"></div>
       <button class="nav-btn active" data-view="panel" onclick="navTo('panel')" title="Panel">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 0 0 1 1h3m10-11l2 2m-2-2v10a1 1 0 0 1-1 1h-3m-6 0a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1m-6 0h6"/></svg>
-        Panel
+        <span>Panel</span>
       </button>
       <button class="nav-btn" data-view="calendar" onclick="navTo('calendar')" title="Calendario">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        Calendario
+        <span>Calendario</span>
       </button>
       <button class="nav-btn" data-view="groups" onclick="navTo('groups')" title="Tareas">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-        Tareas
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <span>Tareas</span>
       </button>
       <button class="nav-btn" data-view="settings" onclick="navTo('settings')" title="Ajustes">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        Ajustes
+        <span>Ajustes</span>
       </button>
     </div>
-    <div class="content" id="content">
-      <iframe id="frame" src="main.html?embed=1"></iframe>
-    </div>
+    <div class="content" id="content"></div>
   </div>
 </div>
 
@@ -102,87 +156,212 @@
 <script>
 const { ipcRenderer } = require('electron');
 const root = document.getElementById('root');
-const frame = document.getElementById('frame');
+const panel = document.getElementById('panel');
 const content = document.getElementById('content');
 const resizer = document.getElementById('resize');
+const glider = document.getElementById('glider');
+const nav = document.getElementById('nav');
 
 const VIEW_SRC = { panel:'main.html?embed=1', calendar:'calendar.html?embed=1', groups:'groups.html?embed=1', settings:'settings.html?embed=1' };
+const VIEW_ORDER = ['panel','calendar','groups','settings'];
 const SIDES = ['left','right','top','bottom'];
 let anchor = 'right';
 let currentView = 'panel';
+const frames = {};   // vista → su iframe (se crean una vez y no se recargan)
 
 function setAnchor(a) {
   anchor = SIDES.includes(a) ? a : 'right';
   SIDES.forEach(x => root.classList.remove('s-' + x));
   root.classList.add('s-' + anchor);
 }
+function esVertical() { return anchor === 'left' || anchor === 'right'; }
 
 ipcRenderer.on('dock-config', (_, cfg) => setAnchor(cfg.anchor));
 
-// El deslizado lo hace la propia ventana (main.js): si se animaba solo el contenido, el
-// rectángulo acrílico de la ventana se quedaba a la vista detrás durante la animación.
+// ---- Entrar y salir (la ventana ya no se desvanece: la tarjeta se desliza desde su borde) ----
+let entrando = 0;
+function entrar() {
+  if (!root.classList.contains('fuera')) return;
+  const mio = ++entrando;
+  // Dos fotogramas con el panel aún fuera: la ventana acaba de enseñarse y tiene que haber
+  // pintado ese punto de partida, o no se vería entrar.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (mio === entrando) root.classList.remove('fuera');
+  }));
+}
+function salir() {
+  entrando++;
+  root.classList.add('fuera');
+  let avisado = false;
+  const avisar = () => { if (avisado) return; avisado = true; ipcRenderer.send('action', { type:'dock-panel-salido' }); };
+  const alAcabar = (e) => { if (e.target === panel && e.propertyName === 'transform') { panel.removeEventListener('transitionend', alAcabar); avisar(); } };
+  panel.addEventListener('transitionend', alAcabar);
+  setTimeout(avisar, 340);
+}
+ipcRenderer.on('panel-entrar', entrar);
+ipcRenderer.on('panel-salir', salir);
+// Por si el aviso de entrar llegó antes de cargar la página: shared.js pregunta al cargar
+// si el panel está desplegado y, si lo está, se recibe este evento.
+window.addEventListener('dock-expanded', entrar);
+
+function frameFor(view) {
+  if (frames[view]) return frames[view];
+  const f = document.createElement('iframe');
+  f.src = VIEW_SRC[view];
+  f.dataset.view = view;
+  content.appendChild(f);
+  frames[view] = f;
+  return f;
+}
+
+function moveGlider(animado = true) {
+  const btn = nav.querySelector(`.nav-btn[data-view="${currentView}"]`);
+  if (!btn) return;
+  if (!animado) glider.style.transition = 'none';
+  glider.style.width = btn.offsetWidth + 'px';
+  glider.style.transform = `translateX(${btn.offsetLeft}px)`;
+  if (!animado) { void glider.offsetWidth; glider.style.transition = ''; }
+}
 
 function setActiveNav(view) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  moveGlider(true);
 }
 
-const VIEW_ORDER = ['panel','calendar','groups','settings'];
-// El cambio de pestaña va en tres tiempos, y ese orden es justo lo que lo hace suave:
-//
-//   1. sale el contenido actual (se desvanece y se aparta un poco);
-//   2. YA invisible, se pide el nuevo tamaño de ventana y se carga la vista nueva;
-//   3. entra el contenido, pero solo cuando la ventana ha llegado a su sitio Y la vista
-//      ha cargado.
-//
-// Antes el tamaño se pedía en el primer instante, con el contenido viejo todavía a la
-// vista: se le veía estirarse mientras la ventana crecía. Y la entrada dependía solo de
-// que cargara el iframe, así que la vista nueva solía aparecer a media animación y se
-// recolocaba entera delante de tus ojos. Al pasar al calendario, que es mucho más ancho,
-// se notaba muchísimo.
-const SALIDA_MS = 110;
-const ESPERA_MAX = 700;   // si algo se atasca, se entra igual: mejor un salto que un panel en blanco
+// La vista que se va empieza a irse en el mismo instante del clic, sin esperar a nadie.
+// `dir` = 1 si la nueva es una pestaña posterior (esta se va hacia la izquierda), -1 al revés.
+function sacar(view, dir) {
+  const f = frames[view];
+  if (!f) return;
+  clearTimeout(f._fin);
+  f.style.setProperty('--to', (-22 * dir) + 'px');
+  f.classList.remove('on', 'sin-anim', 'enfoque', 'preparada');
+  f.classList.add('saliendo', 'animando');
+  f._fin = setTimeout(() => f.classList.remove('saliendo', 'animando'), 380);
+}
 
-function navTo(view) {
-  if (!VIEW_SRC[view] || view === currentView) return;
-  const forward = VIEW_ORDER.indexOf(view) > VIEW_ORDER.indexOf(currentView);
-  const s = document.documentElement.style;
-  s.setProperty('--slide-out', (forward ? -14 : 14) + 'px');
-  s.setProperty('--slide-in',  (forward ? 14 : -14) + 'px');
+// La que entra: deslizándose desde su lado ('deslizar'), solo enfocándose ('enfoque', con
+// cambio de ancho) o de golpe ('seco', al abrir).
+function meter(view, dir, modo) {
+  const f = frameFor(view);
+  // Cualquier otra que siguiera puesta (clics muy seguidos) se va también.
+  Object.entries(frames).forEach(([v, x]) => { if (v !== view && x.classList.contains('on')) sacar(v, dir); });
+  clearTimeout(f._fin);
+  f.classList.remove('saliendo', 'on', 'enfoque', 'animando', 'preparada');
+  f.classList.add('sin-anim');
+  f.style.setProperty('--from', (modo === 'deslizar' ? 26 * dir : 0) + 'px');
+  if (modo === 'seco') {
+    f.classList.add('on');
+    f._fin = setTimeout(() => f.classList.remove('sin-anim'), 60);
+    return;
+  }
+  // La vista se deja maquetada y pintada (aún transparente, en su punto de partida) dos
+  // fotogramas y DESPUÉS se anima: si se animaba mientras se pintaba por primera vez (el
+  // calendario pesa), ese pintado se comía el principio de la animación.
+  if (modo === 'enfoque') f.classList.add('enfoque');
+  f.classList.add('preparada');
+  const token = navToken;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (token !== navToken || currentView !== view) return;
+    f.classList.remove('sin-anim', 'enfoque', 'preparada');
+    f.classList.add('on', 'animando');
+    f._fin = setTimeout(() => f.classList.remove('animando'), 700);
+  }));
+}
 
-  currentView = view;
-  setActiveNav(view);
-  content.classList.remove('entering');
-  content.classList.add('switching');
-
-  const token = ++navToken;
-  setTimeout(() => {
-    if (token !== navToken) return;      // ya se ha pedido otra pestaña por el camino
-    let cargado = false, redimensionado = false, entrado = false;
-    const entrar = () => {
-      if (entrado || token !== navToken) return;
-      if (!(cargado && redimensionado)) return;
-      entrado = true;
-      content.classList.remove('switching');
-      content.classList.add('entering');
-      setTimeout(() => content.classList.remove('entering'), 300);
+// ---- Cambio de ancho (el calendario es más ancho) ----
+function fijarAncho(px) {
+  panel.classList.add('sin-anim-ancho');
+  panel.style.setProperty('--w-panel', px + 'px');
+  void panel.offsetWidth;
+  panel.classList.remove('sin-anim-ancho');
+}
+function soltarAncho() {
+  panel.classList.add('sin-anim-ancho');
+  panel.style.removeProperty('--w-panel');
+  content.style.removeProperty('--w-contenido');
+  void panel.offsetWidth;
+  panel.classList.remove('sin-anim-ancho');
+}
+// La tarjeta va del ancho que tiene al nuevo con muelle. Al crecer la ventana ya es grande
+// (lo de alrededor es transparente); al encoger, la ventana se ajusta cuando ha terminado.
+function animarAncho(hasta, crece) {
+  const token = navToken;
+  content.style.setProperty('--w-contenido', hasta + 'px');
+  panel.style.setProperty('--w-panel', hasta + 'px');
+  let hecho = false;
+  const terminar = () => {
+    if (hecho) return; hecho = true;
+    panel.removeEventListener('transitionend', alAcabar);
+    ipcRenderer.send('action', { type:'dock-panel-ancho-hecho' });
+    if (token !== navToken) return;
+    if (crece) { soltarAncho(); return; }
+    // Al encoger: se pide a la ventana que se ajuste y se suelta en cuanto lo ha hecho.
+    const alRedimensionar = () => {
+      if (Math.abs(window.innerWidth - hasta) > 2) return;
+      window.removeEventListener('resize', alRedimensionar);
+      if (token === navToken) soltarAncho();
     };
-    esperandoResize = () => { redimensionado = true; entrar(); };
+    window.addEventListener('resize', alRedimensionar);
+    ipcRenderer.send('action', { type:'dock-panel-encogido' });
+    setTimeout(() => { window.removeEventListener('resize', alRedimensionar); if (token === navToken) soltarAncho(); }, 1200);
+  };
+  const alAcabar = (e) => { if (e.target === panel && e.propertyName === 'width') terminar(); };
+  panel.addEventListener('transitionend', alAcabar);
+  setTimeout(terminar, 650);
+}
 
-    frame.addEventListener('load', () => { cargado = true; entrar(); }, { once: true });
-    frame.src = VIEW_SRC[view];
-    ipcRenderer.send('action', { type:'dock-view-changed', payload:{ view } });
-
-    // Red de seguridad: ni la carga ni el aviso del proceso principal están
-    // garantizados, y quedarse en blanco sería peor que entrar sin coordinar.
-    setTimeout(() => { cargado = redimensionado = true; entrar(); }, ESPERA_MAX);
-  }, SALIDA_MS);
+// Las vistas que no se ven se cargan en segundo plano poco después, para que el primer
+// cambio de pestaña ya sea instantáneo.
+function precargar() {
+  VIEW_ORDER.forEach((v, i) => setTimeout(() => frameFor(v), 500 + i * 350));
 }
 
 let navToken = 0;
 let esperandoResize = null;
-// El proceso principal avisa cuando la ventana ya está en su tamaño nuevo.
-ipcRenderer.on('dock-panel-resized', () => { if (esperandoResize) esperandoResize(); });
+
+function navTo(view) {
+  if (!VIEW_SRC[view] || view === currentView) return;
+  const dir = VIEW_ORDER.indexOf(view) > VIEW_ORDER.indexOf(currentView) ? 1 : -1;
+  const anterior = currentView;
+  currentView = view;
+  setActiveNav(view);
+  frameFor(view);
+  sacar(anterior, dir);
+  const token = ++navToken;
+  // La tarjeta se queda con el ancho que tiene AHORA antes de avisar: si la ventana crece,
+  // lo hace por detrás, sin que la tarjeta salte.
+  if (esVertical()) fijarAncho(panel.getBoundingClientRect().width);
+  ipcRenderer.send('action', { type:'dock-view-changed', payload:{ view } });
+  esperandoResize = (info) => {
+    if (token !== navToken) return;
+    esperandoResize = null;
+    if (info && info.cambiaTamano && info.hasta && esVertical()) {
+      animarAncho(info.hasta.w, !!info.crece);
+      meter(view, dir, 'enfoque');
+    } else {
+      soltarAncho();
+      meter(view, dir, 'deslizar');
+    }
+  };
+  // Red de seguridad: si el proceso principal no contesta, se cambia igual.
+  setTimeout(() => { if (esperandoResize && token === navToken) esperandoResize(null); }, 700);
+}
+
+// El proceso principal avisa de si cambia el ancho (y a cuánto) o no.
+ipcRenderer.on('dock-panel-resized', (_, info) => {
+  if (esperandoResize) esperandoResize(info || null);
+});
 ipcRenderer.on('dock-navigate', (_, view) => navTo(view));
+
+// Primera vista: la que toque, sin animación.
+meter(currentView, 1, 'seco');
+precargar();
+requestAnimationFrame(() => moveGlider(false));
+window.addEventListener('resize', () => {
+  nav.classList.toggle('estrecho-nav', panel.getBoundingClientRect().width < 340);
+  moveGlider(false);
+});
 
 // ---- Redimensionar: se le pide al proceso principal que cambie el tamaño de ESTA ventana
 let resizeState = null;
