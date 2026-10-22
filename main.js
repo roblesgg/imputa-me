@@ -154,6 +154,7 @@ const NOVEDADES_2_8 = {
 
 const WHATS_NEW = {
   '2.8.0': NOVEDADES_2_8,
+  '2.8.1': NOVEDADES_2_8,
   '2.2.0': NOVEDADES_2_2,
   '2.2.1': NOVEDADES_2_2,
   '2.3.0': NOVEDADES_2_3,

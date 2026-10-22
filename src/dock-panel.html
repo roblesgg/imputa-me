@@ -104,15 +104,19 @@
     position:relative; margin:12px 12px 4px; padding:4px; gap:0; border:none;
     background:var(--bg2); border-radius:999px;
   }
+  /* El indicador va en proporción, no en píxeles: los cuatro botones miden lo mismo, así que
+     ocupa un cuarto y se corre tantos cuartos como el índice de la pestaña. Si el panel
+     cambia de ancho (el calendario), se estira con él y sigue centrado en su botón. */
   .nav-glider {
-    position:absolute; top:4px; bottom:4px; left:0; width:0; border-radius:999px;
+    position:absolute; top:4px; bottom:4px; left:4px; width:calc((100% - 8px) / 4); border-radius:999px;
     background:color-mix(in srgb, var(--accent2) 24%, transparent);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
-    transition:transform .5s cubic-bezier(.34,1.4,.64,1), width .5s cubic-bezier(.34,1.4,.64,1);
+    transform:translateX(calc(var(--i, 0) * 100%));
+    transition:transform .5s cubic-bezier(.34,1.4,.64,1);
     pointer-events:none;
   }
   .nav-btn {
-    position:relative; z-index:1; flex-direction:row; justify-content:center; gap:6px;
+    position:relative; z-index:1; flex-direction:row; justify-content:center; gap:6px; min-width:0;
     padding:8px 6px; border-radius:999px; font-size:12px; font-weight:600; letter-spacing:-.01em;
     color:var(--text2); background:transparent !important;
     transition:color .2s ease;
@@ -215,11 +219,10 @@ function frameFor(view) {
 }
 
 function moveGlider(animado = true) {
-  const btn = nav.querySelector(`.nav-btn[data-view="${currentView}"]`);
-  if (!btn) return;
+  const i = Array.from(nav.querySelectorAll('.nav-btn')).findIndex(b => b.dataset.view === currentView);
+  if (i < 0) return;
   if (!animado) glider.style.transition = 'none';
-  glider.style.width = btn.offsetWidth + 'px';
-  glider.style.transform = `translateX(${btn.offsetLeft}px)`;
+  glider.style.setProperty('--i', i);
   if (!animado) { void glider.offsetWidth; glider.style.transition = ''; }
 }
 
