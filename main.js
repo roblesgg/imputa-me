@@ -178,6 +178,7 @@ const NOVEDADES_2_8_3 = {
 };
 
 const WHATS_NEW = {
+  '2.8.4': { ...NOVEDADES_2_8_3, title: 'Novedades de imputa.me 2.8.4' },
   '2.8.3': NOVEDADES_2_8_3,
   '2.8.0': NOVEDADES_2_8,
   '2.8.1': NOVEDADES_2_8,

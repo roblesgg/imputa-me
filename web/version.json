@@ -1,4 +1,4 @@
 {
-  "version": "2.8.3",
-  "notes": "imputa.me 2.8.3. Ajustes con vista previa de temas, acentos y transparencia. Cristal líquido con captura nativa de Windows en el panel y los avisos. Mejoras en los bordes al desplazar listas, las animaciones del panel, los detalles del calendario y el recordatorio. Correcciones de la repetición del tutorial y del texto superpuesto al desplazar Ajustes."
+  "version": "2.8.4",
+  "notes": "imputa.me 2.8.4. Ajustes con vista previa de temas, acentos y transparencia. Cristal líquido con captura nativa de Windows en el panel y los avisos. Mejoras en los bordes al desplazar listas, las animaciones del panel, los detalles del calendario y el recordatorio. Correcciones de la repetición del tutorial y del texto superpuesto al desplazar Ajustes. Publicación con versión superior para actualizar también desde las compilaciones de prueba 2.8.3."
 }
