@@ -13,17 +13,20 @@
   html, body { width:100%; height:100%; margin:0; overflow:hidden; background:transparent; }
   body { -webkit-app-region:no-drag; }
 
+  /* 2.8.3: la ventana cubre toda el área de trabajo y la tarjeta va pegada a su borde, con el
+     tamaño que le da el JS (--w con la barra a un lado, --h arriba/abajo). Animar ese tamaño
+     es barato: las vistas tienen su propio ancho fijo y la tarjeta solo las destapa. */
   .panel {
-    position:absolute; top:0; bottom:0; display:flex; flex-direction:column;
-    overflow:hidden;
-    /* --w-panel: solo mientras se anima un cambio de ancho; si no, llena la ventana. */
-    width:var(--w-panel, 100%);
-    transition:transform .56s cubic-bezier(.32,1.25,.5,1), opacity .3s ease, width .52s cubic-bezier(.32,1.1,.5,1);
+    position:absolute; display:flex; flex-direction:column; overflow:hidden;
+    width:var(--w, 460px); height:var(--h, auto);
+    transition:transform .56s cubic-bezier(.32,1.25,.5,1), opacity .3s ease,
+               width .52s cubic-bezier(.32,1.1,.5,1), height .52s cubic-bezier(.32,1.1,.5,1);
   }
   .panel.sin-anim-ancho { transition:transform .56s cubic-bezier(.32,1.25,.5,1), opacity .3s ease; }
-  .s-right  .panel { right:0; }
-  .s-left   .panel { left:0; }
-  .s-top    .panel, .s-bottom .panel { left:0; right:0; width:auto; }
+  .s-right  .panel { right:0; top:0; bottom:0; }
+  .s-left   .panel { left:0; top:0; bottom:0; }
+  .s-top    .panel { top:0; left:0; right:0; }
+  .s-bottom .panel { bottom:0; left:0; right:0; }
   /* Fuera: deslizado hacia su borde y transparente (así se queda mientras está plegado). */
   .root.fuera .panel { opacity:0; transition:transform .28s cubic-bezier(.4,0,1,1), opacity .24s cubic-bezier(.4,0,1,1); }
   .s-right.fuera  .panel { transform:translateX(calc(100% + 30px)); }
@@ -31,12 +34,23 @@
   .s-top.fuera    .panel { transform:translateY(calc(-100% - 30px)); }
   .s-bottom.fuera .panel { transform:translateY(calc(100% + 30px)); }
 
-  .resize { position:absolute; z-index:5; }
-  .s-right  .resize { top:0; bottom:0; left:0;  width:7px; cursor:ew-resize; }
-  .s-left   .resize { top:0; bottom:0; right:0; width:7px; cursor:ew-resize; }
-  .s-top    .resize { left:0; right:0; bottom:0; height:7px; cursor:ns-resize; }
-  .s-bottom .resize { left:0; right:0; top:0;   height:7px; cursor:ns-resize; }
-  .resize:hover { background:var(--accent); opacity:.5; }
+  /* 2.8.3: tirador redondo y pequeño arriba, en el borde interior (antes, una línea a lo largo
+     de todo el borde). Casi invisible hasta que pasas por encima. */
+  .resize {
+    position:absolute; z-index:5; width:18px; height:18px; border-radius:50%;
+    background:color-mix(in srgb, var(--text) 14%, transparent);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--text) 16%, transparent);
+    opacity:.45; transition:opacity .2s, transform .3s cubic-bezier(.34,1.56,.64,1), background-color .2s;
+  }
+  .resize::after {
+    content:''; position:absolute; inset:6px; border-radius:50%; background:var(--text); opacity:.55;
+  }
+  .panel:hover .resize { opacity:.8; }
+  .resize:hover, .resize:active { opacity:1; transform:scale(1.2); background:var(--accent-soft-2, rgba(255,159,90,.3)); }
+  .s-right  .resize { top:14px; left:10px;  cursor:ew-resize; }
+  .s-left   .resize { top:14px; right:10px; cursor:ew-resize; }
+  .s-top    .resize { bottom:8px; left:50%; margin-left:-9px; cursor:ns-resize; }
+  .s-bottom .resize { top:8px;    left:50%; margin-left:-9px; cursor:ns-resize; }
 
   .nav { flex-shrink:0; display:flex; align-items:center; }
   .nav-btn {
@@ -45,10 +59,10 @@
 
   .content { flex:1; min-height:0; position:relative; }
   /* Una vista por iframe, cargadas una vez y vivas: cambiar de pestaña no recarga nada.
-     Mientras la tarjeta cambia de ancho, las vistas ya tienen su ancho final
-     (--w-contenido) pegadas a su borde, y la tarjeta las va destapando. */
+     Con la barra a un lado cada vista lleva su propio ancho (el JS se lo pone), pegada al
+     borde: cuando la tarjeta cambia de ancho las va destapando sin volver a maquetarlas. */
   .content iframe {
-    position:absolute; top:0; bottom:0; height:100%; width:var(--w-contenido, 100%);
+    position:absolute; top:0; bottom:0; height:100%; width:100%;
     border:none; background:transparent;
     opacity:0; visibility:hidden; pointer-events:none;
     transform:translateX(var(--from, 26px)) scale(.97);
@@ -98,6 +112,20 @@
   :root[data-scheme="light"] .s-left .panel { box-shadow:inset -1px 0 0 rgba(0,0,0,.06); }
   :root[data-scheme="light"] .s-top .panel { box-shadow:inset 0 -1px 0 rgba(0,0,0,.06); }
   :root[data-scheme="light"] .s-bottom .panel { box-shadow:inset 0 1px 0 rgba(0,0,0,.06); }
+
+  /* Translucidez por encima de mate (Ajustes → Apariencia): cristal líquido con la foto de
+     lo que hay detrás en la pantalla. Se funde encima del fondo mate y, cuando ya se ve
+     entero, ese fondo se quita; los brillos del tema siguen, entre el cristal y el contenido. */
+  .panel { isolation:isolate; }
+  .panel.con-vidrio { background:linear-gradient(160deg, rgba(255,255,255,.06), rgba(255,255,255,0) 38%); }
+  .panel::after {
+    content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; opacity:0;
+    background:
+      radial-gradient(90% 40% at 0% 0%, var(--glow1), transparent 70%),
+      radial-gradient(80% 40% at 100% 100%, var(--glow2), transparent 72%);
+    transition:opacity .3s ease;
+  }
+  .panel.con-vidrio::after { opacity:1; }
 
   /* Pestañas: una cápsula con un indicador que se desliza con muelle hasta la elegida. */
   .nav {
@@ -157,6 +185,7 @@
 </div>
 
 <script src="shared.js"></script>
+<script src="glass.js"></script>
 <script>
 const { ipcRenderer } = require('electron');
 const root = document.getElementById('root');
@@ -173,32 +202,192 @@ let anchor = 'right';
 let currentView = 'panel';
 const frames = {};   // vista → su iframe (se crean una vez y no se recargan)
 
+// ── Tamaño de la tarjeta (2.8.3, rehecho) ───────────────────────────────────────
+// La ventana cubre siempre el área de trabajo y NO cambia de tamaño mientras se ve (ver
+// ajustarVentanaPanel en main.js). Esta página es la única dueña de lo que mide la tarjeta:
+// lo anima por CSS y le dice a main dónde está ('dock-panel-rect': boton = su tamaño, para
+// colocar el botón de esconder; forma = cuánto de la ventana dejar visible, lo demás deja
+// pasar los clics). Cada vista tiene su propio ancho fijo (el calendario es más ancho): al
+// cambiar de pestaña la tarjeta destapa o tapa la vista, pero ninguna se vuelve a maquetar.
+let cfg = { anchor:'right', panelWidth:460, calendarWidth:1180, panelHeight:620 };
+let tamActual = 0;   // lo que mide la tarjeta, o hacia lo que va animando
+function esVertical() { return anchor === 'left' || anchor === 'right'; }
+function tamVista(v) {
+  if (esVertical()) return Math.min(v === 'calendar' ? cfg.calendarWidth : cfg.panelWidth, window.innerWidth);
+  return Math.min(cfg.panelHeight, window.innerHeight);
+}
+function limitesVista(v) {
+  if (esVertical()) return [v === 'calendar' ? 420 : 320, window.innerWidth];
+  return [260, window.innerHeight];
+}
+function avisarTam(boton, forma) {
+  // Con cristal la forma va aparte y pegada a la tarjeta (enviarForma); forma 0 = no tocarla.
+  ipcRenderer.send('action', { type:'dock-panel-rect', payload:{ boton: Math.round(boton), forma: cristal ? 0 : Math.round(forma) } });
+  if (cristal) enviarForma();
+}
+function ponerTam(px, animado) {
+  if (!animado) panel.classList.add('sin-anim-ancho');
+  panel.style.setProperty('--w', esVertical() ? px + 'px' : 'auto');
+  panel.style.setProperty('--h', esVertical() ? 'auto' : px + 'px');
+  if (!animado) { void panel.offsetWidth; panel.classList.remove('sin-anim-ancho'); }
+  tamActual = px;
+}
+function anchosVistas() {
+  Object.entries(frames).forEach(([v, f]) => { f.style.width = esVertical() ? tamVista(v) + 'px' : ''; });
+}
+// Config nueva, borde nuevo o pantalla nueva: todo a su sitio, sin animación.
+function ajustarTodo() {
+  if (finAncho) finAncho();
+  const t = tamVista(currentView);
+  anchosVistas();
+  ponerTam(t, false);
+  avisarTam(t, t);
+}
+
 function setAnchor(a) {
   anchor = SIDES.includes(a) ? a : 'right';
   SIDES.forEach(x => root.classList.remove('s-' + x));
   root.classList.add('s-' + anchor);
 }
-function esVertical() { return anchor === 'left' || anchor === 'right'; }
 
-ipcRenderer.on('dock-config', (_, cfg) => setAnchor(cfg.anchor));
+let firmaCfg = '';
+ipcRenderer.on('dock-config', (_, c) => {
+  // Los deslizadores de la barrita en Ajustes mandan la config muchas veces por segundo:
+  // solo se recoloca la tarjeta si cambia lo que le afecta.
+  const firma = [c.anchor, c.panelWidth, c.calendarWidth, c.panelHeight].join('|');
+  if (firma === firmaCfg) return;
+  const cambiaBorde = c.anchor !== cfg.anchor;
+  firmaCfg = firma;
+  cfg = c;
+  setAnchor(c.anchor);
+  if (!resizeState) ajustarTodo();
+  if (cambiaBorde && cristal) enviarForma();
+});
+// La ventana solo cambia de tamaño si cambia la pantalla: se recoloca todo.
+window.addEventListener('resize', () => { if (!resizeState) ajustarTodo(); });
 
-// ---- Entrar y salir (la ventana ya no se desvanece: la tarjeta se desliza desde su borde) ----
+// ---- Cristal del panel: WebGL con lo de detrás al instante (2.8.3) ----
+// El cristal líquido de glass.js (dobla el fondo en los bordes) con lo que hay detrás leído
+// directamente de la GPU (DXGI Desktop Duplication, src/captura-dxgi.js): 1-2 fotogramas de
+// retraso. La captura se crea una vez y se reutiliza en cada apertura (crearla cuesta ~200 ms);
+// cubre la franja del borde donde puede estar la tarjeta, sea cual sea su ancho. Si no se puede
+// (no hay Desktop Duplication), el vídeo de la pantalla y, si tampoco, una foto fija.
+const cristal = false;            // (con WebGL la forma de la ventana es la de siempre)
+function enviarForma() {}
+function seguirForma() {}
+let vidrio = null;
+let enVivo = null;
+let nativa = null, nativaPedida = null;
+let vidrioToken = 0;
+function quiereVidrio() {
+  return (window.__opacidadFondo == null ? 1 : window.__opacidadFondo) < 0.995
+    && !!window.LiquidGlass && LiquidGlass.supported();
+}
+// Cuanto más translúcido, menos tiñe (y más se ve lo de detrás, desenfocado).
+function tinteVidrio() { return 0.3 + 0.62 * Math.max(0, Math.min(1, window.__opacidadFondo || 0)); }
+// "Difuminar el fondo" apagado: cristal claro, que solo dobla lo de detrás.
+function desenfoqueVidrio() { return window.__difuminar === false ? 3 : 18; }
+function extensionBorde() {
+  // Por el lado pegado al borde de la pantalla la forma sigue de largo: ahí no hay esquinas.
+  const e = { left: 0, right: 0, top: 0, bottom: 0 };
+  e[anchor] = 140;
+  return e;
+}
+// La franja de la pantalla que hay que leer: donde puede estar la tarjeta (la más ancha de las
+// vistas) y un margen para el desenfoque y la refracción del borde. En px de la ventana.
+function zonaCristal() {
+  const W = window.innerWidth, H = window.innerHeight, M = 80;
+  if (esVertical()) {
+    const w = Math.min(W, Math.max(cfg.panelWidth, cfg.calendarWidth) + M);
+    return { x: anchor === 'left' ? 0 : W - w, y: 0, w, h: H };
+  }
+  const h = Math.min(H, cfg.panelHeight + M);
+  return { x: 0, y: anchor === 'top' ? 0 : H - h, w: W, h };
+}
+function capturaNativa() {
+  if (nativa) return Promise.resolve(nativa);
+  if (!nativaPedida) nativaPedida = LiquidGlass.pantallaNativa(zonaCristal).then((n) => { nativa = n; return n; }).catch(() => null);
+  return nativaPedida;
+}
+function quitarVidrio() {
+  vidrioToken++;
+  if (vidrio) { vidrio.detach(); vidrio = null; }
+  if (enVivo) { enVivo.parar(); enVivo = null; }
+  panel.classList.remove('con-vidrio');
+}
+async function ponerVidrio() {
+  const mio = ++vidrioToken;
+  if (vidrio) { vidrio.detach(); vidrio = null; }
+  if (!quiereVidrio()) { quitarVidrio(); return; }
+  const nat = await capturaNativa();
+  if (!nat && !enVivo) enVivo = await LiquidGlass.pantallaEnVivo(60);
+  if (mio !== vidrioToken) return;
+  const g = await LiquidGlass.attach(panel, {
+    nativo: nat, vivo: nat ? null : enVivo,
+    foto: (nat || enVivo) ? null : ipcRenderer.invoke('capture-desktop', {}).catch(() => null),
+    margen: 0, sombra: false, extiende: extensionBorde(), dpr: 1, sinMarca: true,
+    tinte: tinteVidrio(), desenfoque: desenfoqueVidrio(),
+    radius: 26 / 0.44,   // la superelipse de las esquinas de 26 px
+  });
+  if (!g) return;
+  if (mio !== vidrioToken || !quiereVidrio()) { g.detach(); return; }
+  vidrio = g;
+  g.aparecer(220, () => { if (vidrio === g) panel.classList.add('con-vidrio'); });
+}
+// Al entrar, y al mover el deslizador de translucidez o cambiar de tema.
+function ponerCristal() {
+  if (!quiereVidrio()) { if (vidrio || enVivo) quitarVidrio(); return; }
+  if (vidrio && vidrio.opts.desenfoque !== desenfoqueVidrio()) { ponerVidrio(); return; }   // va horneado
+  if (vidrio) { vidrio.opts.tinte = tinteVidrio(); vidrio.draw(); return; }
+  ponerVidrio();
+}
+window.addEventListener('theme-change', () => { if (!root.classList.contains('fuera')) ponerCristal(); });
+// La ventana del panel solo cambia de tamaño si cambia la pantalla (otro monitor, otra
+// resolución): la captura era de la pantalla anterior y se rehace.
+window.addEventListener('resize', () => {
+  if (!nativa && !nativaPedida) return;
+  const vieja = nativa;
+  nativa = null; nativaPedida = null;
+  if (vidrio) ponerVidrio();
+  if (vieja) setTimeout(() => vieja.parar(), 500);   // cuando el cristal nuevo ya no la usa
+});
+// La captura se prepara en segundo plano, con el panel aún escondido: así al abrirlo ya está.
+setTimeout(() => { if (quiereVidrio()) capturaNativa(); }, 1500);
+
+// ---- Entrar y salir (la tarjeta se desliza desde su borde) ----
 let entrando = 0;
+let entrandoAhora = false;   // 'panel-entrar' y 'dock-expanded' llegan los dos al abrir: una sola entrada
 function entrar() {
-  if (!root.classList.contains('fuera')) return;
+  if (!root.classList.contains('fuera') || entrandoAhora) return;
+  entrandoAhora = true;
   const mio = ++entrando;
+  ponerCristal();
+  ajustarTodo();   // la tarjeta a su tamaño, y main recorta la ventana a ella, antes de verse
   // Dos fotogramas con el panel aún fuera: la ventana acaba de enseñarse y tiene que haber
   // pintado ese punto de partida, o no se vería entrar.
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    if (mio === entrando) root.classList.remove('fuera');
+    if (mio !== entrando) return;
+    entrandoAhora = false;
+    root.classList.remove('fuera');
+    ipcRenderer.send('action', { type:'dock-panel-entrando' });
+    seguirForma(800);
   }));
 }
 function salir() {
-  entrando++;
+  entrandoAhora = false;
+  const mio = ++entrando;
+  if (resizeState) endResize();
   root.classList.add('fuera');
+  seguirForma(450);
   let avisado = false;
-  const avisar = () => { if (avisado) return; avisado = true; ipcRenderer.send('action', { type:'dock-panel-salido' }); };
-  const alAcabar = (e) => { if (e.target === panel && e.propertyName === 'transform') { panel.removeEventListener('transitionend', alAcabar); avisar(); } };
+  const avisar = () => {
+    if (avisado) return;
+    avisado = true;
+    panel.removeEventListener('transitionend', alAcabar);
+    if (mio === entrando) quitarVidrio();
+    ipcRenderer.send('action', { type:'dock-panel-salido' });
+  };
+  const alAcabar = (e) => { if (e.target === panel && e.propertyName === 'transform') avisar(); };
   panel.addEventListener('transitionend', alAcabar);
   setTimeout(avisar, 340);
 }
@@ -213,6 +402,7 @@ function frameFor(view) {
   const f = document.createElement('iframe');
   f.src = VIEW_SRC[view];
   f.dataset.view = view;
+  if (esVertical()) f.style.width = tamVista(view) + 'px';
   content.appendChild(f);
   frames[view] = f;
   return f;
@@ -277,49 +467,11 @@ function meter(view, dir, modo) {
 // La vista que acaba de quedar a la vista lo sabe (su recorrido guiado, si tiene pasos
 // pendientes, arranca entonces y no mientras estaba escondida).
 function avisarVista(f) {
-  setTimeout(() => { try { f.contentWindow.dispatchEvent(new Event('dock-expanded')); } catch {} }, 450);
-}
-
-// ---- Cambio de ancho (el calendario es más ancho) ----
-function fijarAncho(px) {
-  panel.classList.add('sin-anim-ancho');
-  panel.style.setProperty('--w-panel', px + 'px');
-  void panel.offsetWidth;
-  panel.classList.remove('sin-anim-ancho');
-}
-function soltarAncho() {
-  panel.classList.add('sin-anim-ancho');
-  panel.style.removeProperty('--w-panel');
-  content.style.removeProperty('--w-contenido');
-  void panel.offsetWidth;
-  panel.classList.remove('sin-anim-ancho');
-}
-// La tarjeta va del ancho que tiene al nuevo con muelle. Al crecer la ventana ya es grande
-// (lo de alrededor es transparente); al encoger, la ventana se ajusta cuando ha terminado.
-function animarAncho(hasta, crece) {
-  const token = navToken;
-  content.style.setProperty('--w-contenido', hasta + 'px');
-  panel.style.setProperty('--w-panel', hasta + 'px');
-  let hecho = false;
-  const terminar = () => {
-    if (hecho) return; hecho = true;
-    panel.removeEventListener('transitionend', alAcabar);
-    ipcRenderer.send('action', { type:'dock-panel-ancho-hecho' });
-    if (token !== navToken) return;
-    if (crece) { soltarAncho(); return; }
-    // Al encoger: se pide a la ventana que se ajuste y se suelta en cuanto lo ha hecho.
-    const alRedimensionar = () => {
-      if (Math.abs(window.innerWidth - hasta) > 2) return;
-      window.removeEventListener('resize', alRedimensionar);
-      if (token === navToken) soltarAncho();
-    };
-    window.addEventListener('resize', alRedimensionar);
-    ipcRenderer.send('action', { type:'dock-panel-encogido' });
-    setTimeout(() => { window.removeEventListener('resize', alRedimensionar); if (token === navToken) soltarAncho(); }, 1200);
-  };
-  const alAcabar = (e) => { if (e.target === panel && e.propertyName === 'width') terminar(); };
-  panel.addEventListener('transitionend', alAcabar);
-  setTimeout(terminar, 650);
+  const v = f.dataset.view;
+  setTimeout(() => {
+    if (currentView !== v || root.classList.contains('fuera')) return;
+    try { f.contentWindow.dispatchEvent(new Event('dock-expanded')); } catch {}
+  }, 450);
 }
 
 // Las vistas que no se ven se cargan en segundo plano poco después, para que el primer
@@ -328,89 +480,108 @@ function precargar() {
   VIEW_ORDER.forEach((v, i) => setTimeout(() => frameFor(v), 500 + i * 350));
 }
 
+// ---- Cambiar de pestaña ----
+// Si cambia el ancho: lo visible de la ventana se agranda YA a lo más ancho de los dos (con
+// aire para el rebote del muelle) y el botón de esconder sale hacia su sitio nuevo a la vez;
+// la tarjeta anima su ancho; al terminar, lo visible se ajusta a la tarjeta. Cada cambio
+// lleva su token: uno que llega a mitad de otro lo sustituye sin dejar nada a medias.
 let navToken = 0;
-let esperandoResize = null;
-
+let finAncho = null;
 function navTo(view) {
   if (!VIEW_SRC[view] || view === currentView) return;
   const dir = VIEW_ORDER.indexOf(view) > VIEW_ORDER.indexOf(currentView) ? 1 : -1;
   const anterior = currentView;
   currentView = view;
+  const token = ++navToken;
+  if (finAncho) finAncho();   // el cambio de ancho anterior deja de mandar
   setActiveNav(view);
   frameFor(view);
+  anchosVistas();
   sacar(anterior, dir);
-  const token = ++navToken;
-  // La tarjeta se queda con el ancho que tiene AHORA antes de avisar: si la ventana crece,
-  // lo hace por detrás, sin que la tarjeta salte.
-  if (esVertical()) fijarAncho(panel.getBoundingClientRect().width);
   ipcRenderer.send('action', { type:'dock-view-changed', payload:{ view } });
-  esperandoResize = (info) => {
-    if (token !== navToken) return;
-    esperandoResize = null;
-    if (info && info.cambiaTamano && info.hasta && esVertical()) {
-      animarAncho(info.hasta.w, !!info.crece);
-      meter(view, dir, 'enfoque');
-    } else {
-      soltarAncho();
-      meter(view, dir, 'deslizar');
-    }
+  const desde = tamActual, hasta = tamVista(view);
+  if (Math.abs(hasta - desde) < 1) { meter(view, dir, 'deslizar'); return; }
+  avisarTam(hasta, Math.max(desde, hasta) + 40);
+  ponerTam(hasta, true);
+  seguirForma(800);
+  meter(view, dir, 'enfoque');
+  let hecho = false;
+  const terminar = () => {
+    if (hecho) return;
+    hecho = true;
+    panel.removeEventListener('transitionend', alAcabar);
+    clearTimeout(red);
+    if (finAncho === terminar) finAncho = null;
+    if (token === navToken && !resizeState) avisarTam(hasta, hasta);
   };
-  // Red de seguridad: si el proceso principal no contesta, se cambia igual.
-  setTimeout(() => { if (esperandoResize && token === navToken) esperandoResize(null); }, 700);
+  const alAcabar = (e) => { if (e.target === panel && (e.propertyName === 'width' || e.propertyName === 'height')) terminar(); };
+  panel.addEventListener('transitionend', alAcabar);
+  const red = setTimeout(terminar, 750);   // por si la transición no llega a terminar
+  finAncho = terminar;
 }
-
-// El proceso principal avisa de si cambia el ancho (y a cuánto) o no.
-ipcRenderer.on('dock-panel-resized', (_, info) => {
-  if (esperandoResize) esperandoResize(info || null);
-});
 ipcRenderer.on('dock-navigate', (_, view) => navTo(view));
 
 // Primera vista: la que toque, sin animación.
 meter(currentView, 1, 'seco');
+ajustarTodo();
 precargar();
 requestAnimationFrame(() => moveGlider(false));
-window.addEventListener('resize', () => {
-  nav.classList.toggle('estrecho-nav', panel.getBoundingClientRect().width < 340);
-  moveGlider(false);
-});
+// Los textos de las pestañas, según lo que mide la tarjeta (no la ventana).
+if (typeof ResizeObserver === 'function') {
+  new ResizeObserver(() => nav.classList.toggle('estrecho-nav', panel.getBoundingClientRect().width < 340)).observe(panel);
+}
 
-// ---- Redimensionar: se le pide al proceso principal que cambie el tamaño de ESTA ventana
+// ---- Redimensionar a mano (el tirador redondo) ----
+// Todo por CSS: la ventana no se toca. Mientras se arrastra se deja visible la ventana
+// entera (para poder agrandar), y al soltar se recorta a la tarjeta y se guarda el tamaño.
 let resizeState = null;
+let rafResize = 0;
 resizer.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   e.preventDefault();
-  resizeState = { x: e.screenX, y: e.screenY, w: window.innerWidth, h: window.innerHeight };
-  // Con captura del puntero los eventos siguen llegando aunque la ventana se encoja y el
-  // cursor quede fuera de ella. Sin esto, el "soltar" se perdía y el arrastre se quedaba
-  // pegado al ratón hasta hacer clic en otro sitio.
+  if (finAncho) finAncho();
+  resizeState = { x: e.screenX, y: e.screenY, desde: tamActual, size: tamActual, view: currentView };
+  panel.classList.add('sin-anim-ancho');
+  avisarTam(tamActual, esVertical() ? window.innerWidth : window.innerHeight);
+  // Con captura del puntero los eventos siguen llegando aunque el cursor salga de la tarjeta.
   try { resizer.setPointerCapture(e.pointerId ?? 1); } catch {}
 });
 document.addEventListener('mousemove', (e) => {
   if (!resizeState) return;
-  // Red de seguridad: si ya no hay ningún botón pulsado, el arrastre terminó (aunque no
-  // hayamos recibido el "soltar" por haberse producido fuera de la ventana).
+  // Red de seguridad: si ya no hay ningún botón pulsado, el arrastre terminó.
   if (e.buttons === 0) { endResize(); return; }
-  let size;
-  if (anchor === 'left' || anchor === 'right') {
-    const dx = e.screenX - resizeState.x;
-    size = Math.max(320, resizeState.w + (anchor === 'right' ? -dx : dx));
-  } else {
-    const dy = e.screenY - resizeState.y;
-    size = Math.max(260, resizeState.h + (anchor === 'bottom' ? -dy : dy));
-  }
-  resizeState.size = size;
-  ipcRenderer.send('action', { type:'dock-panel-resize', payload:{ size, view: currentView } });
+  const d = esVertical() ? e.screenX - resizeState.x : e.screenY - resizeState.y;
+  const crece = (anchor === 'right' || anchor === 'bottom') ? -d : d;
+  const [min, max] = limitesVista(resizeState.view);
+  resizeState.size = Math.round(Math.max(min, Math.min(max, resizeState.desde + crece)));
+  if (rafResize) return;
+  rafResize = requestAnimationFrame(() => {   // un cambio por fotograma, no por evento
+    rafResize = 0;
+    if (!resizeState) return;
+    ponerTam(resizeState.size, false);
+    panel.classList.add('sin-anim-ancho');
+    const f = frames[resizeState.view];
+    if (f && esVertical()) f.style.width = resizeState.size + 'px';
+    if (cristal) enviarForma();
+  });
 });
 function endResize() {
   if (!resizeState) return;
-  const s = resizeState.size; const v = currentView;
+  const { size, desde, view } = resizeState;
   resizeState = null;
-  if (s != null) ipcRenderer.send('action', { type:'dock-panel-resize-end', payload:{ size: s, view: v } });
+  if (rafResize) { cancelAnimationFrame(rafResize); rafResize = 0; }
+  ponerTam(size, false);
+  panel.classList.remove('sin-anim-ancho');
+  // Lo nuevo se apunta ya aquí (main lo guarda y lo devolverá igual en la config).
+  if (esVertical()) { if (view === 'calendar') cfg.calendarWidth = size; else cfg.panelWidth = size; }
+  else cfg.panelHeight = size;
+  anchosVistas();
+  avisarTam(size, size);
+  if (size !== desde) ipcRenderer.send('action', { type:'dock-panel-resize-end', payload:{ size, view } });
 }
 document.addEventListener('mouseup', endResize);
-// Si la ventana pierde el foco o el ratón se va, el arrastre también termina.
+// Si la ventana pierde el foco, el arrastre también termina.
 window.addEventListener('blur', endResize);
-document.addEventListener('mouseleave', (e) => { if (e.buttons === 0) endResize(); });
 </script>
 </body>
 </html>

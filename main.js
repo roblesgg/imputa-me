@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, nativeTheme, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, nativeTheme, Notification, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -25,10 +25,13 @@ const TASK_COLORS = ['#6366f1','#f472b6','#34d399','#fbbf24','#60a5fa','#f87171'
 // Los temas, los acentos y la paleta resuelta viven en themes.js (también los usan las
 // herramientas de captura de tools/).
 const { THEMES, DEFAULT_THEME, ACCENTS, themeVars: resolverTema } = require('./themes');
+const { aplicarDesenfoqueWindows, quitarDesenfoqueWindows, esquinasWindows } = require('./desenfoque-windows');
+const { vigilarCapturas } = require('./capturas-windows');
+const USAR_DESENFOQUE_SISTEMA = false;
 const { GROUP_PALETTES, colorFromGroupPalette } = require('./palettes');
 // Versión de la interfaz: la 3 es el rediseño de la 2.8 (Noche cálida). Al pasar a ella se
 // estrena el tema nuevo una vez; después cada cual elige el que quiera en Ajustes.
-const UI_VERSION = 3;
+const UI_VERSION = 5;
 
 // Recorrido de novedades que se muestra UNA vez al actualizar. Solo para quien va por el
 // canal estable: en el de prueba las versiones se suceden a diario y sería un incordio.
@@ -154,7 +157,28 @@ const NOVEDADES_2_8 = {
   ],
 };
 
+const NOVEDADES_2_8_3 = {
+  title: 'Novedades de imputa.me 2.8.3',
+  steps: [
+    { icon:'spark', title:'Ajustes, de un vistazo',
+      text:'Cada opción con su icono y una línea, no un párrafo. Arriba, tu app en pequeño cambia de color según tocas; la barra flotante y el descanso visual se ven en una pantallita.' },
+    { icon:'guide', title:'Siete temas nuevos y más acentos',
+      text:'Aurora, Medianoche, Atardecer y Musgo (oscuros), Lavanda, Menta y Arena (claros), todos con sus brillos. Y el doble de colores de acento.' },
+    { icon:'bell', title:'El recordatorio, de cristal',
+      text:'El aviso de la esquina brota del borde de la pantalla como una gota, se abre en su sitio y, al irse, vuelve a meterse por donde vino.' },
+    { icon:'bar', title:'Panel lateral de cristal',
+      text:'Sube "Transparencia del panel" en Ajustes y el panel lateral pasa a ser de cristal líquido. Con "Difuminar el fondo" eliges si va esmerilado o claro.' },
+    { icon:'pencil', title:'Ctrl+Z y Ctrl+Y',
+      text:'Deshaz y rehaz cualquier cambio en tareas, ratos del calendario o secciones. Y en el calendario: arrastrar un rato lo vuelve de cristal, clic en "pegar aquí" pega, y clic derecho en una tarea de la izquierda la inicia.' },
+    { icon:'lista', title:'Tareas, como el Panel',
+      text:'Cada tarea es una píldora: el lápiz y la papelera asoman al pasar el ratón, y la que está en marcha se resalta igual que en el Panel.' },
+    { icon:'calendar', title:'Detalles pulidos',
+      text:'Las listas se desvanecen por los bordes al hacer scroll en vez de cortarse en seco, la tarea en marcha del calendario va en una píldora, y en modo ventana ya no se duplica el texto al bajar por Ajustes.' },
+  ],
+};
+
 const WHATS_NEW = {
+  '2.8.3': NOVEDADES_2_8_3,
   '2.8.0': NOVEDADES_2_8,
   '2.8.1': NOVEDADES_2_8,
   '2.8.2': NOVEDADES_2_8,
@@ -283,9 +307,10 @@ let settings = {
   eyeCareSize: 150,      // ancho de la burbuja en px (el alto va en proporción)
   widgetAutoHide: true,
   widgetAutoHideSeconds: 10,
+  widgetScale: 100,         // 2.8.3: tamaño del recordatorio de la esquina (en %)
   colorMode: 'auto', // 'auto' | 'manual'
   openAtLogin: false, // arrancar al iniciar sesión en Windows (desactivado por defecto)
-  bgOpacity: 50,       // 0 = muy translúcida (se ve más el blur), 100 = muy opaca. Blur siempre puesto.
+  bgOpacity: 85,       // 100 = mate; por debajo, el panel lateral es de cristal (2.8.3: de serie, un toque)
   tutorialSeenSteps: [], // ids de pasos del tutorial guiado ya vistos u omitidos (ver TUTORIAL_STEPS en shared.js)
   groupSort: 'created',  // orden de las secciones en Guardadas: 'created' | 'alpha' | 'custom'
   groupSortDir: 'asc',   // y en qué sentido: 'asc' | 'desc'
@@ -364,12 +389,15 @@ function loadData() {
   } catch {}
   // 2.8: estreno del rediseño. Una sola vez, el tema pasa a Noche cálida con su acento; a
   // partir de ahí cada cual elige el que quiera en Ajustes y no se vuelve a tocar.
-  if ((Number(settings.uiVersion) || 0) < UI_VERSION) {
-    settings.theme = DEFAULT_THEME;
-    settings.accent = null;
-    settings.uiVersion = UI_VERSION;
-    saveSettings();
-  }
+  const uiVista = Number(settings.uiVersion) || 0;
+  if (uiVista < 3) { settings.theme = DEFAULT_THEME; settings.accent = null; }
+  // 4 (2.8.3): el deslizador de translucidez ya mueve el panel lateral (y por encima de
+  // mate es de cristal). Todos empiezan en mate, como lo venían viendo; el valor viejo
+  // venía de cuando el deslizador apenas hacía nada.
+  if (uiVista < 4) settings.bgOpacity = 100;
+  // 2.8.3: de serie, el panel con un poco de cristal, esmerilado, y cristal líquido en los bocadillos.
+  if (uiVista < 5) { settings.bgOpacity = 85; settings.blurEnabled = true; settings.liquidGlass = true; settings.colorMode = 'auto'; }
+  if (uiVista < UI_VERSION) { settings.uiVersion = UI_VERSION; saveSettings(); }
   if (!THEMES[settings.theme]) settings.theme = DEFAULT_THEME;
 }
 
@@ -1431,7 +1459,7 @@ function showEyeCare(segundos, forzar) {
   try { win.setBounds(eyeCareBounds()); } catch {}
   const lanzar = () => {
     if (!win || win.isDestroyed()) return;
-    try { win.showInactive(); win.webContents.send('eye-start', secs); } catch {}
+    try { win.showInactive(); win.webContents.send('eye-start', secs, { soloOjos: !!settings.eyeCareSoloOjos }); } catch {}
   };
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', lanzar);
   else lanzar();
@@ -1503,9 +1531,9 @@ function applySystemThemeSource() {
 
 function applyTranslucencyAll() {
   applySystemThemeSource();
-  // Ni la barrita ni (desde la 2.8) el panel del dock llevan material: son transparentes a
-  // propósito, y además applyTranslucency les haría setOpacity (ver createDockPanel).
-  [mainWin, calendarWin, groupsWin, settingsWin, widgetWin, syncWin, updateWin]
+  // Ni la barrita ni (desde la 2.8) el panel del dock ni (2.8.3) el recordatorio llevan
+  // material: son transparentes a propósito, y applyTranslucency les haría setOpacity.
+  [mainWin, calendarWin, groupsWin, settingsWin, syncWin, updateWin]
     .forEach(w => applyTranslucency(w));
   broadcastTheme();
 }
@@ -1622,23 +1650,34 @@ function makeWindow(file, w, h, opts = {}) {
   return win;
 }
 
+// 2.8.3: el recordatorio es una tarjeta de cristal líquido dentro de una ventana
+// transparente, con aire alrededor para su sombra y para la gota con la que entra y sale
+// por el borde de la pantalla (ver widget.html). La tarjeta va abajo a la derecha de la
+// ventana, a 20 px del borde; lo transparente deja pasar los clics (widget-raton).
+function widgetEscala() { return Math.max(80, Math.min(150, Number(settings.widgetScale) || 100)) / 100; }
+// La ventana tiene siempre el tamaño del recordatorio más grande (150 %): así el tamaño se
+// cambia en vivo solo con CSS, sin redimensionar una ventana transparente (parpadea).
+function widgetVentana() { return { w: Math.round(330 * 1.5) + 44 + 20, h: Math.round(200 * 1.5) + 44 + 20 }; }
 function createWidgetWindow() {
   const work = getReferenceDisplay().workArea;
-  // Si el usuario lo movió o lo redimensionó, vuelve donde lo dejó (como cuando solo se
-  // escondía), siempre que esa posición siga dentro de alguna pantalla.
+  // Si el usuario lo movió, vuelve donde lo dejó, siempre que siga dentro de alguna pantalla.
   const wb = widgetBounds;
   const ok = !!wb && screen.getAllDisplays().some(d => {
     const a = d.workArea;
     return wb.x >= a.x && wb.y >= a.y && wb.x < a.x + a.width && wb.y < a.y + a.height;
   });
-  const W = ok ? wb.width : 320, H = ok ? wb.height : 172;
-  const w = widgetWin = makeWindow('widget.html', W, H, {
-    x: ok ? wb.x : work.x + work.width - W - 20, y: ok ? wb.y : work.y + work.height - H - 20,
-    alwaysOnTop: true, skipTaskbar: true,
+  const { w: W, h: H } = widgetVentana();
+  const w = widgetWin = new BrowserWindow({
+    width: W, height: H,
+    x: ok ? wb.x : work.x + work.width - W, y: ok ? wb.y : work.y + work.height - H,
+    frame: false, transparent: true, hasShadow: false, backgroundColor: '#00000000',
+    resizable: false, roundedCorners: false, alwaysOnTop: true, skipTaskbar: true,
     show: false,          // no mostrar al crear: mostramos sin activar (ver showInactive)
-    minWidth: 280, minHeight: 140,
-    maxWidth: 460, maxHeight: 260,
+    icon: WINDOW_ICON_PATH,
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
+  w.loadFile(path.join(__dirname, 'src', 'widget.html'), { search: 'k=' + widgetEscala() });
+  try { w.setIgnoreMouseEvents(true, { forward: true }); } catch {}
   // showInactive: aparece encima pero SIN robar el foco, para no sacarte de lo que
   // estuvieras escribiendo en otra aplicación.
   w.once('ready-to-show', () => {
@@ -1652,17 +1691,19 @@ function createWidgetWindow() {
 // El recordatorio se ve unos segundos cada X minutos: se destruye al retirarlo en vez
 // de esconderlo. Escondido seguía vivo todo el día (un proceso de ~115 MB recibiendo
 // el estado cada segundo); recrearlo cuesta menos de un segundo de CPU por aviso.
-// Su posición y tamaño se guardan en memoria para recrearlo en el mismo sitio.
+// Su posición se guarda en memoria para recrearlo en el mismo sitio. Antes de
+// destruirlo se le deja irse con su animación (unos 560 ms).
 let widgetBounds = null;
 function hideWidget() {
   if (widgetHideTimer) { clearTimeout(widgetHideTimer); widgetHideTimer = null; }
-  try {
-    if (widgetWin && !widgetWin.isDestroyed()) {
-      if (widgetWin.isVisible()) widgetBounds = widgetWin.getBounds();
-      widgetWin.destroy();
-    }
-  } catch {}
+  const w = widgetWin;
   widgetWin = null;
+  if (!w || w.isDestroyed()) return;
+  try {
+    if (w.isVisible()) widgetBounds = w.getBounds();
+    w.webContents.send('widget-salir');
+  } catch {}
+  setTimeout(() => { try { if (!w.isDestroyed()) w.destroy(); } catch {} }, 680);
 }
 
 // ── Modo dock (barra flotante lateral) ────────────────────────────────────────
@@ -1711,6 +1752,7 @@ function dockConfig() {
     barOffset: Math.max(0, Math.min(120, settings.dockBarOffset == null ? 4 : Number(settings.dockBarOffset))),
     barOpacity: Math.max(5, Math.min(100, Number(settings.dockBarOpacity) || 30)),
     barColor: settings.dockBarColor || '#ffffff',
+    barGlass: settings.dockBarGlass !== false,   // 2.8.3: de cristal (por defecto)
     panelWidth: Math.max(320, Math.min(1600, Number(settings.dockPanelWidth) || 460)),
     panelHeight: Math.max(260, Math.min(1400, Number(settings.dockPanelHeight) || 620)),
     calendarWidth: Math.max(420, Math.min(1900, Number(settings.dockCalendarWidth) || 1180)),
@@ -1726,23 +1768,77 @@ function computeDockBounds() {
 }
 
 // Dónde va el panel: pegado a su borde, ocupando todo el largo de ese borde.
-function computePanelBounds(view) {
+// Lo que mide la tarjeta del panel en una vista: el ancho con la barra a un lado (el
+// calendario es más ancho) o el alto con la barra arriba/abajo.
+function tamPanelVista(view) {
+  const c = dockConfig();
+  if (c.anchor === 'left' || c.anchor === 'right') return view === 'calendar' ? c.calendarWidth : c.panelWidth;
+  return c.panelHeight;
+}
+// Rectángulo en pantalla de una tarjeta de ese tamaño, pegada a su borde.
+function rectPanel(size) {
   const work = dockDisplay().workArea;
   const c = dockConfig();
-  const vertical = c.anchor === 'left' || c.anchor === 'right';
-  if (vertical) {
-    const width = Math.min(view === 'calendar' ? c.calendarWidth : c.panelWidth, work.width);
-    return {
-      x: c.anchor === 'left' ? work.x : work.x + work.width - width,
-      y: work.y, width, height: work.height,
-    };
+  if (c.anchor === 'left' || c.anchor === 'right') {
+    const width = Math.max(1, Math.min(Math.round(size), work.width));
+    return { x: c.anchor === 'left' ? work.x : work.x + work.width - width, y: work.y, width, height: work.height };
   }
-  const height = Math.min(c.panelHeight, work.height);
-  return {
-    x: work.x,
-    y: c.anchor === 'top' ? work.y : work.y + work.height - height,
-    width: work.width, height,
-  };
+  const height = Math.max(1, Math.min(Math.round(size), work.height));
+  return { x: work.x, y: c.anchor === 'top' ? work.y : work.y + work.height - height, width: work.width, height };
+}
+function computePanelBounds(view) { return rectPanel(tamPanelVista(view)); }
+
+// ── Ventana del panel (rehecha en la 2.8.3) ─────────────────────────────────────
+// La ventana cubre SIEMPRE el área de trabajo de su pantalla, igual que la de la barrita,
+// y NO se mueve ni cambia de tamaño mientras se ve: redimensionar una ventana transparente
+// visible en Windows pinta un fotograma viejo desplazado (el "parpadeo"). Todo lo que se
+// ve (entrar, cambiar de pestaña y de ancho, redimensionar a mano) lo anima la página, que
+// es la única dueña del tamaño de la tarjeta y lo comunica con 'dock-panel-rect'. Aquí solo
+// se recorta la ventana a la tarjeta (setShape: lo de fuera deja pasar los clics) y se
+// coloca el botón de esconder.
+let dockPanelRect = null;   // dónde está la tarjeta (en pantalla), según la página
+
+function formaRedondeada(x, y, w, h, radios) {
+  x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
+  if (!(w > 0 && h > 0)) return [{ x: 0, y: 0, width: 1, height: 1 }];   // nada visible
+  const max = Math.floor(Math.min(w, h) / 2);
+  const [tl, tr, br, bl] = (radios || [0, 0, 0, 0]).map(r => Math.max(0, Math.min(Math.round(Number(r) || 0), max)));
+  const entra = (r, i) => (i < r ? Math.ceil(r - Math.sqrt(Math.max(0, r * r - (r - i - 0.5) * (r - i - 0.5)))) : 0);
+  const arriba = Math.max(tl, tr), abajo = Math.max(bl, br);
+  const filas = [];
+  for (let i = 0; i < arriba; i++) { const a = entra(tl, i), b = entra(tr, i); filas.push({ x: x + a, y: y + i, width: w - a - b, height: 1 }); }
+  filas.push({ x, y: y + arriba, width: w, height: h - arriba - abajo });
+  for (let i = abajo - 1; i >= 0; i--) { const a = entra(bl, i), b = entra(br, i); filas.push({ x: x + a, y: y + h - 1 - i, width: w - a - b, height: 1 }); }
+  // Filas seguidas con el mismo ancho se juntan en un solo rectángulo.
+  const juntas = [];
+  for (const r of filas) {
+    if (!(r.width > 0 && r.height > 0)) continue;
+    const u = juntas[juntas.length - 1];
+    if (u && u.x === r.x && u.width === r.width && u.y + u.height === r.y) u.height += r.height;
+    else juntas.push({ ...r });
+  }
+  return juntas.length ? juntas : [{ x: 0, y: 0, width: 1, height: 1 }];
+}
+function ajustarVentanaPanel() {
+  const w = dockPanelWin;
+  if (!w || w.isDestroyed()) return false;
+  const want = computeDockBounds();
+  let cur;
+  try { cur = w.getBounds(); } catch { return false; }
+  if (cur.x === want.x && cur.y === want.y && cur.width === want.width && cur.height === want.height) return false;
+  try { w.setBounds(want); } catch {}
+  w.__forma = null;   // la forma va relativa a la ventana: hay que volver a ponerla
+  return true;
+}
+function aplicarFormaPanel(size) {
+  const w = dockPanelWin;
+  if (!w || w.isDestroyed() || !(size > 0)) return;
+  const r = rectPanel(size), b = computeDockBounds();   // b: los límites que tiene (o va a tener) la ventana
+  const forma = { x: r.x - b.x, y: r.y - b.y, width: r.width, height: r.height };
+  const clave = JSON.stringify(forma);
+  if (clave === w.__forma) return;   // sin cambios: ni se toca (cada setShape repinta)
+  w.__forma = clave;
+  try { w.setShape([forma]); } catch {}
 }
 
 let dockPanelView = 'panel';
@@ -1751,7 +1847,7 @@ let dockPanelShownAt = 0;   // cuándo se mostró el panel (ver el blur de clic-
 function createDockPanel() {
   if (dockPanelWin && !dockPanelWin.isDestroyed()) return;
   dockPanelWin = new BrowserWindow({
-    ...computePanelBounds(dockPanelView),
+    ...computeDockBounds(),
     show: false,
     frame: false, hasShadow: false,
     // 2.8: TRANSPARENTE y sin acrílico. Con el acrílico Windows solo deja esquinas de 8 px
@@ -1788,71 +1884,12 @@ function createDockPanel() {
       collapseDockPanel();
     }, 140);
   });
-  dockPanelWin.on('closed', () => { dockPanelWin = null; });
-}
-
-// Le dice a la ventana de la barrita cómo de grande es AHORA el panel, para que coloque
-// su botón de esconder justo por fuera (el calendario es bastante más ancho que el resto).
-// Anima el cambio de tamaño/posición de una ventana. Hace falta porque al pasar del
-// panel normal al calendario (mucho más ancho) la ventana daba un salto seco; Electron
-// solo sabe animar bounds en macOS, así que se interpola a mano.
-// opciones: { ms, from, onFrame, onDone, ease }
-function animateWindowBounds(win, target, opciones = {}) {
-  const { ms = 190, from: fromOverride, onFrame, onDone, ease: easeOpt } = opciones;
-  if (!win || win.isDestroyed()) return;
-  // OJO: el punto de partida se pasa explícitamente cuando lo sabemos. Leerlo con
-  // getBounds() justo después de un setBounds era una carrera: si Windows aún no lo había
-  // aplicado devolvía la posición vieja, se creía que ya estaba en destino y no animaba
-  // nada... dejando la ventana fuera de la pantalla y el panel invisible.
-  let from = fromOverride;
-  if (!from) { try { from = win.getBounds(); } catch { return; } }
-  if (win.__boundsTween) { clearTimeout(win.__boundsTween); win.__boundsTween = null; }
-  // Cada animación lleva su marca: así el salvavidas de abajo no puede colocar la ventana
-  // en el destino de una animación ya sustituida por otra (p. ej. abrir justo tras cerrar).
-  const token = (win.__boundsToken = (win.__boundsToken || 0) + 1);
-  const same = from.x === target.x && from.y === target.y && from.width === target.width && from.height === target.height;
-  // Red de seguridad: pase lo que pase con la animación, la ventana acaba en su sitio.
-  let avisado = false;
-  const land = () => {
-    if (win.__boundsToken !== token) return;
-    try { if (win && !win.isDestroyed()) win.setBounds(target); } catch {}
-    if (!avisado) { avisado = true; if (onDone) { try { onDone(); } catch {} } }
-  };
-  if (same) { land(); return; }
-
-  // setTimeout encadenado y no setInterval de 16 ms: en Windows la resolución de los
-  // temporizadores hace que un intervalo de 16 acabe disparando a ~15,6 o ~31 ms, y esos
-  // fotogramas dobles son los tirones que se ven. Encadenando a 6 ms se pide bastante más
-  // de lo que la pantalla puede dibujar y es ella la que marca el ritmo. La posición sale
-  // del reloj, no del número de fotograma, así que perder alguno no descoloca nada.
-  const start = performance.now();
-  // Por defecto, suave al final (como el resto de la app). Para un cambio de tamaño que
-  // la vista sigue de principio a fin queda mejor una curva suave por los DOS lados: sin
-  // ella el arranque es un tirón.
-  const ease = easeOpt || ((t) => 1 - Math.pow(1 - t, 3));
-  let ultimo = null;
-  const paso = () => {
-    if (!win || win.isDestroyed() || win.__boundsToken !== token) { win.__boundsTween = null; return; }
-    const t = Math.min(1, (performance.now() - start) / ms);
-    const k = ease(t);
-    const b = {
-      x: Math.round(from.x + (target.x - from.x) * k),
-      y: Math.round(from.y + (target.y - from.y) * k),
-      width: Math.round(from.width + (target.width - from.width) * k),
-      height: Math.round(from.height + (target.height - from.height) * k),
-    };
-    // Si redondeado no ha cambiado nada, no se molesta al gestor de ventanas: cada
-    // setBounds es una llamada al sistema, y de balde solo resta fluidez.
-    if (!ultimo || b.x !== ultimo.x || b.y !== ultimo.y || b.width !== ultimo.width || b.height !== ultimo.height) {
-      ultimo = b;
-      try { win.setBounds(b); } catch {}
-      if (onFrame) { try { onFrame(b, k); } catch {} }
-    }
-    if (t >= 1) { win.__boundsTween = null; land(); return; }
-    win.__boundsTween = setTimeout(paso, 6);
-  };
-  win.__boundsTween = setTimeout(paso, 0);
-  setTimeout(() => { if (!win.__boundsTween) land(); }, ms + 120);
+  dockPanelWin.on('closed', () => { dockPanelWin = null; dockPanelRect = null; });
+  aplicarFormaPanel(tamPanelVista(dockPanelView));
+  dockPanelWin.webContents.on('render-process-gone', () => {
+    try { if (dockPanelWin && !dockPanelWin.isDestroyed()) dockPanelWin.destroy(); } catch {}
+    dockPanelWin = null; dockExpanded = false; hideDockHide(); ensureDockBarVisible();
+  });
 }
 
 // El botón de esconder ya no tiene ventana propia: se pinta dentro de la de la barra
@@ -1894,11 +1931,6 @@ function hideDockHide() {
   try { dockWin.webContents.send('dock-hide-btn', { visible: false }); } catch {}
 }
 
-// Punto de partida al abrir y de llegada al cerrar. Es un desplazamiento CORTO y HACIA
-// DENTRO de la pantalla, no hacia fuera: sacándolo por el borde, con dos monitores la
-// ventana asomaba un instante en el monitor de al lado antes de esconderse. La sensación
-// de entrar/salir la da el desvanecido que lo acompaña.
-const PANEL_SLIDE = 54;
 // La barrita tiene que estar SIEMPRE visible y con las medidas del área de trabajo. Si la
 // ventana se creó cuando el escritorio aún se montaba (arranque con Windows) o cambian los
 // monitores, sus medidas se quedan viejas: entonces su "borde derecho" cae en mitad de la
@@ -1964,14 +1996,9 @@ function syncDockBounds() {
   if (cur.x !== want.x || cur.y !== want.y || cur.width !== want.width || cur.height !== want.height) {
     try { dockWin.setBounds(want); } catch {}
   }
-  // El panel abierto también se recoloca, por si cambió la pantalla bajo sus pies.
-  // Si el panel se está redimensionando (cambio de pestaña), no se le toca: colocarlo
-  // de golpe a medio camino rompería la animación.
-  if (dockExpanded && dockPanelWin && !dockPanelWin.isDestroyed() && !dockPanelWin.__boundsTween) {
-    const pb = computePanelBounds(dockPanelView);
-    try { dockPanelWin.setBounds(pb); } catch {}
-    positionDockHide(pb);
-  }
+  // El panel solo se recoloca si cambió la pantalla bajo sus pies (su ventana mide siempre
+  // el área de trabajo). La página lo nota (resize) y vuelve a decir dónde está su tarjeta.
+  ajustarVentanaPanel();
 }
 
 // 2.8: la ventana (transparente) se coloca y se enseña ya en su sitio, y es la página la
@@ -1981,17 +2008,25 @@ function syncDockBounds() {
 function showDockPanel() {
   createDockPanel();
   if (!dockPanelWin || dockPanelWin.isDestroyed()) return;
-  const target = computePanelBounds(dockPanelView);
+  ajustarVentanaPanel();
+  if (!dockPanelRect) aplicarFormaPanel(tamPanelVista(dockPanelView));   // la página la afina al entrar
   const wasVisible = dockPanelWin.isVisible();
   // Oculto está frenado y puede llevar un fotograma viejo: el estado al día antes de verse.
   if (!wasVisible) sendStateToWindow(dockPanelWin);
   dockPanelWin.__salida = (dockPanelWin.__salida || 0) + 1;   // anula una salida a medias
   try {
-    dockPanelWin.setBounds(target);
     dockPanelWin.showInactive(); dockPanelWin.moveTop(); dockPanelWin.focus();
   } catch {}
   dockExpanded = true; dockOutsideSince = 0; dockPanelShownAt = Date.now();
-  showDockHide(target);
+  // 2.8.3: el botón de esconder sale cuando el panel empieza a entrar (con cristal, la página
+  // espera a tener la foto de detrás), no antes. Por si no avisa, a los 450 ms.
+  const turno = dockPanelWin.__salida;
+  dockPanelWin.__botonPendiente = () => {
+    if (!dockPanelWin || dockPanelWin.isDestroyed() || dockPanelWin.__salida !== turno || !dockExpanded) return;
+    dockPanelWin.__botonPendiente = null;
+    showDockHide(dockPanelRect || computePanelBounds(dockPanelView));
+  };
+  setTimeout(() => { if (dockPanelWin && dockPanelWin.__botonPendiente) dockPanelWin.__botonPendiente(); }, 450);
   try { dockPanelWin.webContents.send('panel-entrar'); } catch {}
   sendToAllFrames(dockPanelWin, 'dock-expanded');
 }
@@ -2024,9 +2059,7 @@ function sendDockConfig() {
     if (w.webContents.isLoading()) w.webContents.once('did-finish-load', send);
     else send();
   });
-  if (dockPanelWin && !dockPanelWin.isDestroyed() && dockExpanded) {
-    try { dockPanelWin.setBounds(computePanelBounds(dockPanelView)); } catch {}
-  }
+  ajustarVentanaPanel();   // por si cambió de pantalla
 }
 
 // Decide si el dock captura el ratón o deja pasar los clics al escritorio, mirando dónde
@@ -2067,16 +2100,14 @@ function updateDockHitTest() {
   if (dockExpanded && settings.dockCloseMode === 'mouseLeave') {
     let overPanel = false;
     if (dockPanelWin && !dockPanelWin.isDestroyed() && dockPanelWin.isVisible()) {
-      try {
-        const pb = dockPanelWin.getBounds();
-        overPanel = p.x >= pb.x && p.x <= pb.x + pb.width && p.y >= pb.y && p.y <= pb.y + pb.height;
-      } catch {}
+      const pb = dockPanelRect || computePanelBounds(dockPanelView);
+      overPanel = p.x >= pb.x && p.x <= pb.x + pb.width && p.y >= pb.y && p.y <= pb.y + pb.height;
     }
     if (inside || overPanel) dockOutsideSince = 0;
     else {
       const now = Date.now();
       if (!dockOutsideSince) dockOutsideSince = now;
-      else if (now - dockOutsideSince >= (Number(settings.dockCloseSeconds) ?? 3) * 1000) {
+      else if (now - dockOutsideSince >= (Number.isFinite(Number(settings.dockCloseSeconds)) ? Number(settings.dockCloseSeconds) : 3) * 1000) {
         dockOutsideSince = 0;
         collapseDockPanel();
       }
@@ -2461,8 +2492,46 @@ function broadcastState(opts) {
   (todas ? allDockFrames() : activeDockFrames()).forEach(f => { try { f.send('state', s); } catch {} });
 }
 
+// ── Deshacer / rehacer (Ctrl+Z / Ctrl+Y) ─────────────────────────────────────────
+// Antes de cada cambio en tareas, entradas o secciones se guarda una foto del estado. Los
+// cambios seguidos del mismo tipo (p. ej. estirar un bloque varias veces) van en una sola.
+const ACCIONES_DESHACIBLES = new Set([
+  'start-task', 'add-subtask', 'add-subtask-and-start', 'rename-subtask', 'delete-subtask', 'pause',
+  'switch-task', 'restart-task-with-note', 'resume-entry', 'create-task', 'update-task-meta',
+  'set-task-memo', 'delete-task', 'restore-task', 'purge-task', 'edit-task-color', 'rename-task',
+  'set-active-note', 'archive-task', 'unarchive-task', 'create-group', 'rename-group', 'delete-group',
+  'move-task-to-group', 'set-group-palette', 'recolor-group-tasks', 'reorder-groups',
+  'restore-and-start-task', 'edit-entry', 'delete-entry', 'add-calendar-entry', 'archive-purge',
+]);
+const pilaDeshacer = [], pilaRehacer = [];
+let ultimaFoto = { type: null, t: 0 };
+function fotoAntesDe(type) {
+  const ahora = Date.now();
+  if (type === ultimaFoto.type && ahora - ultimaFoto.t < 700) { ultimaFoto.t = ahora; return; }
+  ultimaFoto = { type, t: ahora };
+  pilaDeshacer.push(JSON.stringify(state));
+  if (pilaDeshacer.length > 60) pilaDeshacer.shift();
+  pilaRehacer.length = 0;
+}
+function deshacer(rehacer) {
+  const de = rehacer ? pilaRehacer : pilaDeshacer, a = rehacer ? pilaDeshacer : pilaRehacer;
+  if (!de.length) return false;
+  a.push(JSON.stringify(state));
+  state = JSON.parse(de.pop());
+  ultimaFoto = { type: null, t: 0 };
+  saveData(); broadcastState(); resetReminderTimer();
+  return true;
+}
+
 ipcMain.on('action', (event, { type, payload }) => {
+  if (ACCIONES_DESHACIBLES.has(type)) fotoAntesDe(type);
   switch (type) {
+    case 'undo':
+    case 'redo': {
+      const ok = deshacer(type === 'redo');
+      try { event.reply('undo-hecho', { tipo: type, ok }); } catch {}
+      break;
+    }
     case 'start-task':    startTask(payload.taskId, payload.backMinutes, payload.subId); break;
     case 'add-subtask':    addSubtask(payload.taskId, payload.name); break;
     // Crear y arrancar de una vez: quien la crea desde "Empezar tarea" la quiere ya en
@@ -2529,6 +2598,7 @@ ipcMain.on('action', (event, { type, payload }) => {
       if (p.eyeCareRest !== undefined) settings.eyeCareRest = Math.max(5, Math.min(120, Number(p.eyeCareRest) || 20));
       if (p.eyeCarePos !== undefined) settings.eyeCarePos = p.eyeCarePos;
       if (p.eyeCareSize !== undefined) settings.eyeCareSize = Math.max(80, Math.min(420, Number(p.eyeCareSize) || 150));
+      if (p.eyeCareSoloOjos !== undefined) settings.eyeCareSoloOjos = !!p.eyeCareSoloOjos;   // 2.8.3: sin fondo
       saveSettingsSoon(); broadcastState();
       // La cuenta atrás solo vuelve a empezar si se acaba de encender o si cambia cada
       // cuánto avisa. Mover el tamaño o la posición no debe retrasar el próximo aviso.
@@ -2613,14 +2683,9 @@ ipcMain.on('action', (event, { type, payload }) => {
     case 'set-blur':
       settings.blurEnabled = !!(payload && payload.enabled);
       saveSettings();
-      // El material solo se puede cambiar en caliente en algunas ventanas; el panel del
-      // dock se recrea para que el cambio se vea seguro.
+      // 2.8.3: el panel del dock ya no lleva material de Windows; el desenfoque es el de su
+      // cristal, que llega con el tema (themeVars.difuminar) y se rehace solo.
       applyTranslucencyAll();
-      if (dockPanelWin && !dockPanelWin.isDestroyed()) {
-        const wasVisible = dockPanelWin.isVisible();
-        dockPanelWin.close(); dockPanelWin = null;
-        if (wasVisible) showDockPanel();
-      }
       break;
     // Aplicar un ajuste suelto al momento (los controles de Ajustes no deben esperar a
     // que se pulse "Aplicar" para verse).
@@ -2631,6 +2696,7 @@ ipcMain.on('action', (event, { type, payload }) => {
       saveSettingsSoon();
       if (key === 'reminderMinutes' || key === 'widgetAutoHide' || key === 'widgetAutoHideSeconds') resetReminderTimer();
       if (key === 'openAtLogin') applyLoginItem();
+      if (key === 'widgetScale') widgetBounds = null;   // el sitio guardado era del tamaño de antes
       broadcastState();   // p. ej. colorMode lo usan los selectores de color
       break;
     }
@@ -2679,6 +2745,24 @@ ipcMain.on('action', (event, { type, payload }) => {
     case 'open-settings': openSettings(); break;
     case 'open-groups':   openGroups(); break;
     case 'close-widget':  hideWidget(); break;
+    case 'widget-escala-vivo': {   // Ajustes: el deslizador de tamaño, mientras se mueve
+      settings.widgetScale = Math.max(80, Math.min(150, Number(payload && payload.value) || 100));
+      saveSettingsSoon();
+      if (widgetWin && !widgetWin.isDestroyed()) {
+        try { widgetWin.webContents.send('widget-escala', widgetEscala()); } catch {}
+        scheduleWidgetAutoHide();   // que no se esconda mientras lo ajustas
+      } else createWidgetWindow();
+      break;
+    }
+    case 'preview-widget':   // Ajustes: enseñar el recordatorio con el tamaño elegido
+      if (widgetWin && !widgetWin.isDestroyed()) { try { widgetWin.destroy(); } catch {} widgetWin = null; }
+      createWidgetWindow();
+      break;
+    case 'widget-raton': {   // la tarjeta pide los clics solo mientras el ratón está encima
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win && !win.isDestroyed()) try { win.setIgnoreMouseEvents(!payload.dentro, { forward: true }); } catch {}
+      break;
+    }
     case 'close-main':
       if (settings.dockMode && dockWin && !dockWin.isDestroyed()) dockWin.webContents.send('dock-collapse');
       else if (mainWin && !mainWin.isDestroyed()) mainWin.hide();
@@ -2706,89 +2790,60 @@ ipcMain.on('action', (event, { type, payload }) => {
         // broadcastState). Los tiempos se refrescan cuando ha terminado de entrar: mandárselos
         // antes la hacía repintarse en mitad de la animación.
         setTimeout(sendStateToActiveDockFrame, 700);
-        if (dockPanelWin && !dockPanelWin.isDestroyed()) {
-          let desde = null;
-          try { desde = dockPanelWin.getBounds(); } catch {}
-          const nb = computePanelBounds(dockPanelView);
-          const cambiaTamano = !desde || desde.width !== nb.width || desde.height !== nb.height;
-
-          if (!cambiaTamano || !dockPanelWin.isVisible()) {
-            // Mismo ancho (panel, tareas, ajustes) o panel plegado: la vista se cruza sola
-            // dentro de la ventana, sin tocarla.
-            dockPanelWin.__boundsTween = false;
-            try { dockPanelWin.setBounds(nb); } catch {}
-            positionDockHide(nb);
-            try { dockPanelWin.webContents.send('dock-panel-resized', { cambiaTamano: false }); } catch {}
-          } else {
-            // Cambia el ancho (el calendario es más ancho). La ventana es transparente y el
-            // panel una tarjeta de la página: la tarjeta anima su ancho y la ventana solo
-            // cambia de tamaño donde no se nota. Al crecer, la ventana se agranda YA (la
-            // tarjeta sigue con su ancho, fijado por la página antes de avisar) y la tarjeta
-            // crece hasta llenarla; al encoger, la tarjeta encoge primero y la ventana se
-            // ajusta cuando ha terminado ('dock-panel-encogido').
-            const crece = nb.width > desde.width || nb.height > desde.height;
-            dockPanelWin.__boundsTween = true;   // que nadie la recoloque a medio camino
-            positionDockHide(nb);                // el botón de esconder viaja a la vez
-            if (crece) { try { dockPanelWin.setBounds(nb); } catch {} }
-            else dockPanelWin.__alEncoger = () => {
-              dockPanelWin.__alEncoger = null;
-              if (dockPanelView !== payload.view) return;
-              try { dockPanelWin.setBounds(nb); } catch {}
-            };
-            try {
-              dockPanelWin.webContents.send('dock-panel-resized',
-                { cambiaTamano: true, crece, hasta: { w: nb.width, h: nb.height } });
-            } catch {}
-            // Red de seguridad: si la página no llega a avisar, se deja todo en su sitio igual.
-            setTimeout(() => {
-              if (!dockPanelWin || dockPanelWin.isDestroyed()) return;
-              if (dockPanelWin.__alEncoger) dockPanelWin.__alEncoger();
-              dockPanelWin.__boundsTween = false;
-            }, 1500);
-          }
-        }
+        // 2.8.3: el ancho lo anima la página y avisa con 'dock-panel-rect'.
       }
       break;
-    case 'dock-panel-encogido':   // la página ya ha encogido la tarjeta: ajusta la ventana
-      if (dockPanelWin && !dockPanelWin.isDestroyed() && dockPanelWin.__alEncoger) dockPanelWin.__alEncoger();
+    // 2.8.3: la forma visible de la ventana que lo pide (lo de fuera deja pasar los clics y no
+    // lleva desenfoque). x, y, w, h en px de la página; radios de las esquinas.
+    case 'forma-ventana': {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || win.isDestroyed() || !payload) break;
+      const clave = [payload.x, payload.y, payload.w, payload.h, (payload.radios || []).join(',')].map(v => typeof v === 'number' ? Math.round(v) : v).join('|');
+      if (win.__forma === clave) break;   // sin cambios: ni se toca (cada setShape repinta)
+      win.__forma = clave;
+      try { win.setShape(formaRedondeada(payload.x, payload.y, payload.w, payload.h, payload.radios)); } catch {}
       break;
-    case 'dock-panel-ancho-hecho':   // terminó la animación de ancho (crecer o encoger)
-      if (dockPanelWin && !dockPanelWin.isDestroyed()) dockPanelWin.__boundsTween = false;
+    }
+    // Desenfoque del propio Windows detrás de la ventana (cero retraso: lo pinta el compositor).
+    case 'desenfoque-sistema': {
+      // DESACTIVADO: Windows desenfoca el rectángulo ENTERO de la ventana, sin respetar su forma
+      // (probado con setShape y con SetWindowRgn nativo): con el panel, que ocupa la pantalla,
+      // desenfocaba todo. Solo valdría con ventanas del tamaño exacto de la tarjeta.
+      if (!USAR_DESENFOQUE_SISTEMA) break;
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || win.isDestroyed()) break;
+      const on = !!(payload && payload.on);
+      if (win.__desenfoque === on) break;
+      win.__desenfoque = on;
+      if (on) aplicarDesenfoqueWindows(win, { estado: 3 }); else quitarDesenfoqueWindows(win);
+      break;
+    }
+    case 'dock-panel-rect': {   // dónde está la tarjeta: botón = su tamaño; forma = cuánto dejar visible
+      if (!dockPanelWin || dockPanelWin.isDestroyed() || !payload) break;
+      const boton = Number(payload.boton) || 0, forma = payload.forma == null ? boton : Number(payload.forma) || 0;
+      if (forma > 0) aplicarFormaPanel(forma);
+      if (boton > 0) {
+        dockPanelRect = rectPanel(boton);
+        if (dockExpanded && !dockPanelWin.__botonPendiente) positionDockHide(dockPanelRect);
+      }
+      break;
+    }
+    case 'dock-panel-entrando':   // la tarjeta empieza a deslizarse: ahora sí, el botón
+      if (dockPanelWin && !dockPanelWin.isDestroyed() && dockPanelWin.__botonPendiente) dockPanelWin.__botonPendiente();
       break;
     case 'dock-panel-salido':     // el panel ya ha salido deslizándose: se esconde la ventana
       if (dockPanelWin && !dockPanelWin.isDestroyed() && dockPanelWin.__alSalir) dockPanelWin.__alSalir();
-      break;
-    case 'dock-panel-resize':
-      if (dockPanelWin && !dockPanelWin.isDestroyed() && payload) {
-        const work = dockDisplay().workArea;
-        const c = dockConfig();
-        const vertical = c.anchor === 'left' || c.anchor === 'right';
-        const size = Number(payload.size) || 0;
-        try {
-          let nb;
-          if (vertical) {
-            const width = Math.max(320, Math.min(size, work.width));
-            nb = { x: c.anchor === 'left' ? work.x : work.x + work.width - width, y: work.y, width, height: work.height };
-          } else {
-            const height = Math.max(260, Math.min(size, work.height));
-            nb = { x: work.x, y: c.anchor === 'top' ? work.y : work.y + work.height - height, width: work.width, height };
-          }
-          dockPanelWin.setBounds(nb);
-          // Se le pasan los límites que acabamos de fijar, no los que devuelva getBounds:
-          // justo después de un setBounds puede seguir dando los de antes.
-          positionDockHide(nb);
-        } catch {}
-      }
       break;
     case 'dock-panel-resize-end': {
       // Se recuerda por separado: el ancho del calendario no pisa el del resto.
       const c = dockConfig();
       const vertical = c.anchor === 'left' || c.anchor === 'right';
-      const size = Number(payload && payload.size) || 0;
+      const size = Math.round(Number(payload && payload.size) || 0);
       if (size > 0) {
-        if (!vertical) settings.dockPanelHeight = size;
-        else if ((payload && payload.view) === 'calendar') settings.dockCalendarWidth = size;
-        else settings.dockPanelWidth = size;
+        const lim = (a, b) => Math.max(a, Math.min(b, size));
+        if (!vertical) settings.dockPanelHeight = lim(260, 1400);
+        else if ((payload && payload.view) === 'calendar') settings.dockCalendarWidth = lim(420, 1900);
+        else settings.dockPanelWidth = lim(320, 1600);
         saveSettingsSoon();
         sendDockConfig();   // la barrita necesita el tamaño para colocar su botón
       }
@@ -3044,6 +3099,111 @@ ipcMain.handle('apply-import-backup', async (_e, payload) => {
   return { ok: true };
 });
 
+// Foto de lo que hay DETRÁS del panel del dock (el escritorio y las demás apps), para su
+// cristal líquido cuando la translucidez no está en mate. Cubre la zona más ancha que
+// puede ocupar el panel (la del calendario), así sirve aunque cambie de ancho. Mientras se
+// hace, el panel y la barrita se excluyen de las capturas (setContentProtection →
+// WDA_EXCLUDEFROMCAPTURE) para no salir en su propia foto, y enseguida se dejan como
+// estaban, para que sí salgan si compartes pantalla.
+// La pantalla en directo para el cristal del recordatorio y de los ojos: el id de la pantalla
+// donde está la ventana que lo pide, que se excluye de la captura para no verse a sí misma.
+// Para la captura nativa del cristal (src/captura-dxgi.js, en la página): la pantalla donde
+// está la ventana, en px lógicos (dip) y físicos (fis), para pasar de unos a otros. La ventana
+// deja de salir en capturas (WDA_EXCLUDEFROMCAPTURE): si no, el cristal se vería a sí mismo.
+// Ventanas excluidas de capturas por su cristal en vivo. Cuando el usuario va a hacer una captura
+// (capturas-windows.js) se les quita la exclusión un momento, con el cristal congelado.
+const ventanasExcluidas = new Set();
+let capturaEnCurso = false;
+function cristalesPausados(on) {
+  ventanasExcluidas.forEach(w => { if (w.isDestroyed()) ventanasExcluidas.delete(w); else sendToAllFrames(w, 'captura-pausa', on); });
+}
+function exclusionCapturas(on) {
+  ventanasExcluidas.forEach(w => { if (w.isDestroyed()) ventanasExcluidas.delete(w); else { try { w.setContentProtection(on); } catch {} } });
+}
+function alCambiarCaptura(empieza) {
+  capturaEnCurso = empieza;
+  if (empieza) {
+    // Primero se congela el cristal (si no, vería la propia ventana) y luego se deja ver.
+    cristalesPausados(true);
+    setTimeout(() => { if (capturaEnCurso) exclusionCapturas(false); }, 60);
+  } else {
+    exclusionCapturas(true);
+    setTimeout(() => { if (!capturaEnCurso) cristalesPausados(false); }, 90);
+  }
+}
+
+ipcMain.handle('fuente-dxgi', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return null;
+  ventanasExcluidas.add(win);
+  if (capturaEnCurso) sendToAllFrames(win, 'captura-pausa', true);
+  else { try { win.setContentProtection(true); } catch {} }
+  try {
+    const d = screen.getDisplayMatching(win.getBounds());
+    let fis;
+    try { fis = screen.dipToScreenRect(null, d.bounds); } catch { fis = null; }
+    if (!fis) fis = { x: Math.round(d.bounds.x * d.scaleFactor), y: Math.round(d.bounds.y * d.scaleFactor), width: Math.round(d.bounds.width * d.scaleFactor), height: Math.round(d.bounds.height * d.scaleFactor) };
+    return { dip: d.bounds, fis, sf: fis.width / d.bounds.width };
+  } catch { return null; }
+});
+
+ipcMain.handle('fuente-pantalla', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return null;
+  try { win.setContentProtection(true); } catch {}
+  try {
+    const disp = screen.getDisplayMatching(win.getBounds());
+    const fuentes = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } });
+    const src = fuentes.find(s => String(s.display_id) === String(disp.id)) || fuentes[0];
+    const b = disp.bounds;
+    return src ? { id: src.id, region: { x: b.x, y: b.y, w: b.width, h: b.height } } : null;
+  } catch { return null; }
+});
+
+ipcMain.handle('capture-desktop', async (event, opts) => {
+  // { propia: true }: lo que hay detrás de la ventana que lo pide (el recordatorio). Si no,
+  // lo de detrás del panel del dock y su calendario.
+  const propia = opts && opts.propia ? BrowserWindow.fromWebContents(event.sender) : null;
+  const protegidas = (propia ? [propia] : [dockPanelWin, dockWin]).filter(w => w && !w.isDestroyed());
+  try {
+    let disp, region;
+    if (propia) {
+      const b = propia.getBounds();
+      disp = screen.getDisplayMatching(b);
+      region = { x: b.x, y: b.y, w: b.width, h: b.height };
+    } else {
+      disp = dockDisplay();
+      const a = computePanelBounds('panel'), b = computePanelBounds('calendar');
+      const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+      region = { x, y, w: Math.max(a.x + a.width, b.x + b.width) - x, h: Math.max(a.y + a.height, b.y + b.height) - y };
+    }
+    const sf = disp.scaleFactor || 1;
+    protegidas.forEach(w => { try { w.setContentProtection(true); } catch {} });
+    await new Promise(r => setTimeout(r, 40));   // que el sistema lo aplique antes de la foto
+    const fuentes = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: Math.round(disp.bounds.width * sf), height: Math.round(disp.bounds.height * sf) },
+    });
+    const src = fuentes.find(s => String(s.display_id) === String(disp.id)) || fuentes[0];
+    if (!src || !src.thumbnail || src.thumbnail.isEmpty()) return null;
+    const k = src.thumbnail.getSize().width / disp.bounds.width;
+    const img = src.thumbnail.crop({
+      x: Math.round((region.x - disp.bounds.x) * k), y: Math.round((region.y - disp.bounds.y) * k),
+      width: Math.round(region.w * k), height: Math.round(region.h * k),
+    });
+    const data = img.toBitmap();
+    let { width: pw, height: ph } = img.getSize();
+    if (data.length !== pw * ph * 4) {
+      const s = Math.sqrt(data.length / 4 / (pw * ph));
+      pw = Math.round(pw * s); ph = Math.round(ph * s);
+      if (data.length !== pw * ph * 4) return null;
+    }
+    return { data, pw, ph, region };
+  } catch { return null; }
+  // Las que llevan cristal en vivo siguen excluidas (si no, se verían a sí mismas).
+  finally { protegidas.forEach(w => { if (!ventanasExcluidas.has(w) || capturaEnCurso) { try { w.setContentProtection(false); } catch {} } }); }
+});
+
 // Login/logout de sincronización (respuestas asíncronas)
 ipcMain.handle('sync-login', async (_e, { email, password }) => sync ? sync.login(email, password) : { ok: false, error: 'Sync no disponible' });
 ipcMain.handle('sync-logout', async () => sync ? sync.logout() : { ok: true });
@@ -3194,6 +3354,7 @@ function checkForUpdates(manual) {
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  vigilarCapturas(alCambiarCaptura);   // que la app salga en las capturas del usuario (ver fuente-dxgi)
   DATA_FILE = path.join(app.getPath('userData'), 'imputa-tasks.json');
   SETTINGS_FILE = path.join(app.getPath('userData'), 'imputa-settings.json');
   loadData();

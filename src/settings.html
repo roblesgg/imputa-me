@@ -20,142 +20,279 @@
   }
 
   /* ── Secciones ─────────────────────────────────────────────── */
+  /* 2.8.3: menos letra y más grande. Cada ajuste lleva su icono de color (como los Ajustes
+     del Mac) y como mucho una línea corta; lo que se puede enseñar, se enseña con un dibujo. */
   .section { display:flex;flex-direction:column;gap:2px;flex-shrink:0; }
-  .section-label {
-    font-size:var(--font-xs);font-weight:var(--fw-bold);color:var(--text2);
-    text-transform:uppercase;letter-spacing:.1em;margin:0 0 8px 2px;
-  }
-  .card {
-    background:var(--bg2);border:1px solid var(--border);border-radius:14px;
-    display:flex;flex-direction:column;overflow:hidden;
-  }
-  .row {
-    display:flex;align-items:center;gap:14px;padding:15px 16px;
-    -webkit-app-region:no-drag;
-  }
-  .row + .row { border-top:1px solid var(--border); }
-  .row-text { flex:1;min-width:0;display:flex;flex-direction:column;gap:3px; }
-  .row-title { font-size:var(--font-md);font-weight:var(--fw-semibold);color:var(--text); }
-  .row-desc { font-size:var(--font-xs);color:var(--text2);line-height:1.4; }
-  .row-sub { padding:0 16px 15px;display:none;flex-direction:column;gap:9px; }
-  .row-sub.open { display:flex; }
+  .section-label { font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px 6px; }
+  .card { background:var(--bg2);border-radius:18px;display:flex;flex-direction:column;overflow:hidden; }
+  .row { position:relative;display:flex;align-items:center;gap:12px;padding:13px 16px;-webkit-app-region:no-drag; }
+  .card > * + .row::before { content:'';position:absolute;top:0;left:58px;right:0;height:1px;background:var(--border); }
+  .row.col { flex-direction:column;align-items:stretch;gap:14px; }
+  .row-head { display:flex;align-items:center;gap:12px; }
+  .row-text { flex:1;min-width:0;display:flex;flex-direction:column;gap:2px; }
+  .row-title { font-size:14.5px;font-weight:600;color:var(--text);letter-spacing:-.01em; }
+  .row-desc { font-size:12.5px;color:var(--text2);line-height:1.35; }
+  .row-sub { padding:2px 16px 18px 58px;display:none;flex-direction:column;gap:16px; }
+  .row-sub.open { display:flex;animation:subAbre .34s var(--ease) both; }
+  @keyframes subAbre { from { opacity:0;transform:translateY(-6px); } }
 
-  /* ── Interruptor 3D animado ────────────────────────────────── */
-  .switch { position:relative;width:54px;height:31px;flex-shrink:0; }
-  .switch input {
-    position:absolute;inset:0;width:100%;height:100%;margin:0;
-    opacity:0;cursor:pointer;z-index:3;
+  /* Icono de cada ajuste: baldosa de color con el dibujo en blanco. */
+  .ico {
+    width:30px;height:30px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;color:#fff;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--ic) 80%, #fff), var(--ic));
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.25), 0 1px 3px rgba(0,0,0,.22);
   }
-  .switch-track {
-    position:absolute;inset:0;border-radius:999px;
-    background:linear-gradient(180deg, rgba(0,0,0,.42), rgba(255,255,255,.05));
-    box-shadow:inset 0 2px 6px rgba(0,0,0,.6), inset 0 -1px 0 rgba(255,255,255,.07), 0 1px 0 rgba(255,255,255,.05);
-    transition:background .3s ease, box-shadow .3s ease;
+  .ico svg { width:17px;height:17px; }
+
+  /* Un ajuste con deslizador: nombre a la izquierda y el valor en píldora a la derecha. */
+  .campo { display:flex;flex-direction:column;gap:8px; }
+  .campo-top { display:flex;align-items:center;justify-content:space-between;gap:10px; }
+  .sub-label { font-size:13px;color:var(--text2);font-weight:550; }
+  .valor {
+    font-size:12px;font-weight:650;color:var(--accent);background:var(--accent-soft);
+    padding:3px 10px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;
   }
-  .switch input:checked ~ .switch-track {
-    background:linear-gradient(180deg, var(--accent), var(--accent2));
-    box-shadow:inset 0 2px 6px rgba(0,0,0,.32), 0 0 16px color-mix(in srgb, var(--accent2) 55%, transparent), inset 0 -1px 0 rgba(255,255,255,.22);
-  }
+  .rejilla { display:grid;grid-template-columns:1fr 1fr;gap:16px 18px; }
+  .nota { font-size:12px;color:var(--text3); }
+
+  /* ── Interruptor (como el de macOS) ─────────────────────────── */
+  .switch { position:relative;width:46px;height:28px;flex-shrink:0; }
+  .switch input { position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:3; }
+  .switch-track { position:absolute;inset:0;border-radius:999px;background:var(--bg3);transition:background-color .25s ease; }
+  .switch input:checked ~ .switch-track { background:var(--accent2); }
   .switch-knob {
-    position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;
-    background:linear-gradient(180deg, #ffffff, #d5d5e2);
-    box-shadow:0 3px 6px rgba(0,0,0,.55), inset 0 -2px 3px rgba(0,0,0,.16), inset 0 2px 0 rgba(255,255,255,.95);
-    transition:transform .34s cubic-bezier(.34,1.45,.5,1), width .16s ease;
-    pointer-events:none;
+    position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:999px;background:#fff;
+    box-shadow:0 2px 5px rgba(0,0,0,.3), 0 0 0 .5px rgba(0,0,0,.06);
+    transition:transform .36s var(--spring), width .16s ease;pointer-events:none;
   }
-  .switch input:checked ~ .switch-knob { transform:translateX(23px); }
-  .switch input:active ~ .switch-knob { width:30px; }
-  .switch input:checked:active ~ .switch-knob { transform:translateX(18px); }
+  .switch input:checked ~ .switch-knob { transform:translateX(18px); }
+  .switch input:active ~ .switch-knob { width:29px; }
+  .switch input:checked:active ~ .switch-knob { transform:translateX(13px); }
 
   /* ── Controles ─────────────────────────────────────────────── */
   .num-input {
-    width:74px;background:var(--bg);border:1px solid var(--border);border-radius:10px;
-    color:var(--text);font-family:inherit;font-size:15px;font-weight:600;text-align:center;
-    padding:10px 8px;outline:none;-webkit-app-region:no-drag;flex-shrink:0;
+    width:64px;border-radius:12px;font-size:15px;font-weight:650;text-align:center;
+    padding:8px 6px;outline:none;-webkit-app-region:no-drag;flex-shrink:0;
   }
-  .num-input:focus { border-color:var(--accent); }
-  .unit { font-size:12px;color:var(--text2);flex-shrink:0; }
+  .unit { font-size:13px;color:var(--text2);flex-shrink:0; }
 
+  /* Deslizador fino con la parte recorrida en color (--p la pone pintarRangos). */
   input[type=range] {
-    width:100%;accent-color:var(--accent2);-webkit-app-region:no-drag;height:20px;
-    cursor:pointer;
+    -webkit-appearance:none;appearance:none;width:100%;height:22px;margin:0;background:transparent;
+    cursor:pointer;-webkit-app-region:no-drag;--p:50%;
   }
-  /* Sin esto, al pasar por encima del tirador el cursor alternaba entre mano y flecha. */
-  input[type=range]::-webkit-slider-runnable-track { cursor:pointer; }
-  input[type=range]::-webkit-slider-thumb { cursor:pointer; }
-  input[type=range]:active { cursor:grabbing; }
-  input[type=range]:active::-webkit-slider-thumb { cursor:grabbing; }
+  input[type=range]:hover, input[type=range]:focus { background:transparent;box-shadow:none; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height:6px;border-radius:999px;cursor:pointer;
+    background:linear-gradient(to right, var(--accent2) var(--p), var(--bg3) var(--p));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none;width:20px;height:20px;margin-top:-7px;border-radius:50%;background:#fff;cursor:pointer;
+    box-shadow:0 1px 4px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.08);
+    transition:transform .25s var(--spring);
+  }
+  input[type=range]:hover::-webkit-slider-thumb { transform:scale(1.1); }
+  input[type=range]:active::-webkit-slider-thumb { transform:scale(1.2);cursor:grabbing; }
   .range-row { display:flex;align-items:center;gap:12px; }
-  .range-row .unit { min-width:38px;text-align:right;font-variant-numeric:tabular-nums; }
 
   select { width:100%; }
 
-  /* Selector de lado (izquierda/derecha) tipo segmented control */
-  .seg { display:flex;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:3px;gap:3px; }
+  /* Selector segmentado: el elegido, tonal (como los botones de la app). */
+  .seg { display:flex;flex-wrap:wrap;background:var(--bg2);border-radius:12px;padding:3px;gap:3px; }
   .seg button {
     flex:1;background:transparent;border:none;color:var(--text2);
-    font-size:12.5px;font-weight:600;padding:8px 6px;border-radius:8px;cursor:pointer;transition:all .15s;
+    font-size:13px;font-weight:600;padding:8px 6px;border-radius:9px;cursor:pointer;
+    transition:background-color .18s, color .18s;
   }
-  .seg button.active { background:var(--accent2);color:#fff;box-shadow:0 2px 8px color-mix(in srgb, var(--accent2) 45%, transparent); }
+  .seg button:hover { color:var(--text); }
+  .seg button.active { background:var(--accent-soft-2);color:var(--accent); }
 
-  /* Paleta de colores de la barra */
+  /* Colores de la barrita */
   .swatches { display:flex;gap:9px;flex-wrap:wrap; }
-  .swatch {
-    width:30px;height:30px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;
-    transition:transform .15s, border-color .15s;
-  }
-  .swatch:hover { transform:scale(1.12); }
-  .swatch.selected { border-color:var(--text);transform:scale(1.12); }
+  .swatch { width:28px;height:28px;border-radius:50%;cursor:pointer;transition:transform .25s var(--spring); }
+  .swatch:hover { transform:scale(1.14); }
 
-  .sub-label { font-size:11.5px;color:var(--text2);font-weight:600; }
-
-  /* Hora de salida */
-  .time-input {
-    background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);
-    font-family:inherit;font-size:13px;padding:7px 9px;outline:none;
+  /* Acentos: bolitas con su degradado y brillo; la elegida, con anillo y ✓. */
+  .acentos { display:flex;flex-wrap:wrap;gap:11px; }
+  .acento {
+    width:34px;height:34px;border-radius:50%;cursor:pointer;position:relative;display:grid;place-items:center;color:#fff;
+    background:linear-gradient(150deg, var(--a1), var(--a2));
+    box-shadow:none;
+    transition:transform .32s var(--spring), box-shadow .2s;
   }
-  .time-input:focus { border-color:var(--accent); }
+  .acento:hover { transform:scale(1.14) rotate(-6deg); }
+  .acento svg { opacity:0;transform:scale(.3);transition:opacity .15s, transform .35s var(--spring);filter:drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
+  .acento.selected { box-shadow:0 0 0 2.5px var(--surface), 0 0 0 4.5px var(--a2); }
+  .acento.selected svg { opacity:1;transform:none; }
+  .acento.auto::after {
+    content:'';position:absolute;inset:-4px;border-radius:50%;
+    border:1.5px dashed color-mix(in srgb, var(--text) 32%, transparent);
+  }
+  .acento.auto.selected::after { display:none; }
+
+  .sub-label + .seg, .sub-label + .swatches { margin-top:0; }
+
+  /* Hora de salida: cada opción con un interruptor pequeño en vez de una casilla. */
+  .time-input { font-family:inherit;font-size:14px;padding:7px 10px;border-radius:10px;outline:none; }
   .time-input:disabled { opacity:.35; }
-  .day-row { display:flex;align-items:center;gap:10px; }
-  .day-row .day-name { flex:1;font-size:13px; }
-  .day-row.off .day-name { color:var(--text2);text-decoration:line-through; }
+  .day-row { display:flex;align-items:center;gap:12px;min-height:30px; }
+  .day-row .day-name { flex:1;font-size:13.5px;color:var(--text); }
+  .day-row.off .day-name { color:var(--text3); }
   .day-check {
-    width:18px;height:18px;flex-shrink:0;accent-color:var(--accent);cursor:pointer;margin:0;
+    -webkit-appearance:none;appearance:none;position:relative;width:36px;height:22px;margin:0;flex-shrink:0;
+    border:none;border-radius:999px;background:var(--bg3);cursor:pointer;transition:background-color .2s;
   }
+  .day-check:hover { background:var(--bg3); }
+  .day-check::after {
+    content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .32s var(--spring);
+  }
+  .day-check:checked, .day-check:checked:hover { background:var(--accent2); }
+  .day-check:checked::after { transform:translateX(14px); }
 
   /* Color libre, por si ninguno de los predefinidos vale. */
   .custom-color { display:flex;align-items:center;gap:10px;cursor:pointer;-webkit-app-region:no-drag; }
   .custom-color input[type=color] {
-    width:38px;height:30px;padding:0;border:1px solid var(--border);border-radius:8px;
-    background:transparent;cursor:pointer;
+    width:34px;height:28px;padding:0;border:none;border-radius:8px;background:transparent;cursor:pointer;
   }
-  .custom-color span { font-size:12px;color:var(--text2); }
+  .custom-color span { font-size:13px;color:var(--text2); }
 
-
-  /* Rejilla de temas: cada uno se previsualiza con sus propios colores. */
-  .theme-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:9px; }
+  /* Temas: cada uno se previsualiza con su fondo, sus brillos y la bolita de su acento. */
+  .theme-grid { display:grid;grid-template-columns:repeat(5,1fr);gap:10px 8px; }
+  .mini + .row::before { display:none; }
+  .theme-sep {
+    grid-column:1/-1;font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.07em;
+    text-transform:uppercase;margin:2px 0 -4px 2px;
+  }
   .theme-chip {
     display:flex;flex-direction:column;align-items:center;gap:6px;
     background:transparent;border:none;cursor:pointer;padding:0;-webkit-app-region:no-drag;
   }
   .theme-dot {
-    width:100%;aspect-ratio:1;border-radius:11px;position:relative;overflow:hidden;
-    border:2.5px solid transparent;transition:transform .15s, border-color .15s;
+    width:100%;aspect-ratio:5/4;border-radius:13px;position:relative;overflow:hidden;
+    box-shadow:inset 0 0 0 1px rgba(127,127,127,.2);transition:transform .3s var(--spring), box-shadow .2s;
   }
-  .theme-chip:hover .theme-dot { transform:scale(1.07); }
-  .theme-chip.selected .theme-dot { border-color:var(--text); }
+  .theme-chip:hover .theme-dot { transform:scale(1.06); }
+  .theme-chip.selected .theme-dot { box-shadow:0 0 0 2px var(--surface), 0 0 0 4px var(--accent2); }
   .theme-dot::after {
-    content:'';position:absolute;right:5px;bottom:5px;width:42%;height:42%;border-radius:50%;
+    content:'';position:absolute;right:6px;bottom:6px;width:11px;height:11px;border-radius:50%;
+    background:var(--acc);box-shadow:0 1px 3px rgba(0,0,0,.35);
   }
-  .theme-name { font-size:10.5px;color:var(--text2); }
-  .theme-chip.selected .theme-name { color:var(--text);font-weight:600; }
+  .theme-name { font-size:11.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%; }
+  .theme-chip.selected .theme-name { color:var(--text);font-weight:650; }
+
+  /* ── Miniapp de Apariencia ─────────────────────────────────────
+     La app en formas, sin detalle: un fondo de escritorio, el calendario y el panel lateral.
+     Usa las variables del tema, así que cambia sola al elegir tema o acento; la
+     transparencia, el difuminado y el cristal líquido los pone pintarMini. */
+  .mini {
+    position:relative;height:184px;margin:14px 14px 0;border-radius:16px;overflow:hidden;isolation:isolate;
+    background:#2a2340;box-shadow:inset 0 0 0 1px rgba(127,127,127,.18);
+  }
+  .mini.pulso { animation:miniPulso .5s var(--spring); }
+  @keyframes miniPulso { 40% { transform:scale(.975); } }
+  .mini-fondo i, .pb-fondo i { position:absolute;border-radius:50%; }
+  .mini-fondo i:nth-child(1), .pb-fondo i:nth-child(1) { width:46%;aspect-ratio:1;left:-8%;top:8%;background:#ff7a59; }
+  .mini-fondo i:nth-child(2), .pb-fondo i:nth-child(2) { width:58%;aspect-ratio:1;left:28%;top:52%;background:#5b8cff; }
+  .mini-fondo i:nth-child(3), .pb-fondo i:nth-child(3) { width:34%;aspect-ratio:1;right:-6%;top:-14%;background:#ffd166; }
+  .mini-fondo i:nth-child(4), .pb-fondo i:nth-child(4) { width:30%;aspect-ratio:1;right:4%;bottom:-12%;background:#30c48d; }
+
+  .mini-ventana {
+    position:absolute;left:33%;right:12px;top:16px;bottom:16px;border-radius:13px;overflow:hidden;
+    background:
+      radial-gradient(80% 60% at 0% 0%, var(--glow1), transparent 70%),
+      radial-gradient(70% 60% at 100% 100%, var(--glow2), transparent 70%),
+      var(--bg);
+    box-shadow:0 10px 26px rgba(0,0,0,.35);
+  }
+  .mini-barra { position:absolute;left:10px;right:10px;top:8px;height:8px;display:flex;gap:5px; }
+  .mini-barra b { height:8px;border-radius:4px;background:var(--bg3); }
+  .mini-barra b:nth-child(1) { width:30%;background:color-mix(in srgb, var(--text) 70%, transparent); }
+  .mini-barra b:nth-child(2) { width:14%; }
+  .mini-barra b:nth-child(3) { width:14%;margin-left:auto;background:var(--accent-soft-2); }
+  .mini-cal {
+    position:absolute;inset:26px 8px 8px;display:grid;gap:4px;
+    grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(6,1fr);
+  }
+  .mini-cal span { border-radius:6px;grid-column:var(--x);grid-row:var(--y) / span var(--h);background:var(--c);transition:background-color .4s; }
+
+  .mini-panel {
+    position:absolute;left:10px;top:10px;bottom:10px;width:31%;border-radius:16px;overflow:hidden;
+    padding:11px 9px;display:flex;flex-direction:column;gap:6px;isolation:isolate;
+    box-shadow:0 10px 26px rgba(0,0,0,.32);transition:box-shadow .3s;
+  }
+  .mini-panel::before {
+    content:'';position:absolute;inset:0;z-index:-1;background:var(--surface);
+    opacity:var(--mini-op, 1);transition:opacity .35s var(--ease);
+  }
+  .mini.con-cristal .mini-panel {
+    backdrop-filter:blur(9px) saturate(1.5);
+    box-shadow:0 10px 26px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.2), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .mini.con-cristal.sin-blur .mini-panel { backdrop-filter:blur(1px) saturate(1.4); }
+  .mp-linea { height:6px;width:46%;border-radius:3px;background:color-mix(in srgb, var(--text) 55%, transparent); }
+  .mp-reloj { height:20px;width:78%;border-radius:7px;background:var(--text);opacity:.9;margin-bottom:3px; }
+  .mp-pildora { height:17px;border-radius:999px;background:var(--bg2);display:flex;align-items:center;gap:5px;padding:0 6px;transition:background-color .4s; }
+  .mp-pildora i { width:7px;height:7px;border-radius:50%;background:var(--c);flex-shrink:0; }
+  .mp-pildora s { flex:1;height:4px;border-radius:2px;background:color-mix(in srgb, var(--text) 35%, transparent); }
+  .mp-pildora.on { background:var(--accent-soft); }
+  .mp-pildora.on i { background:var(--accent2);animation:latidoPildora 2.4s ease-in-out infinite; }
+  .mp-boton { margin-top:auto;height:18px;border-radius:999px;background:var(--accent-soft-2);display:grid;place-items:center; }
+  .mp-boton s { width:40%;height:4px;border-radius:2px;background:var(--accent); }
+
+  /* El bocadillo: con cristal líquido, claro y con canto de luz; sin él, esmerilado. */
+  .mini-burbuja {
+    position:absolute;right:26px;top:50px;width:74px;height:46px;border-radius:15px;
+    padding:10px;display:flex;flex-direction:column;gap:6px;
+    background:color-mix(in srgb, var(--surface) 30%, transparent);
+    backdrop-filter:blur(2.5px) saturate(1.9);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.3), inset 0 1.5px 1px rgba(255,255,255,.55), 0 8px 18px rgba(0,0,0,.3);
+    animation:flota 5s ease-in-out infinite;transition:background-color .3s, backdrop-filter .3s, box-shadow .3s;
+  }
+  .mini-burbuja s { height:5px;border-radius:3px;background:var(--text);opacity:.8; }
+  .mini-burbuja s + s { width:60%;opacity:.45; }
+  .mini.sin-liquido .mini-burbuja {
+    background:color-mix(in srgb, var(--surface) 72%, transparent);backdrop-filter:blur(12px);
+    box-shadow:inset 0 0 0 1px var(--border), 0 8px 18px rgba(0,0,0,.3);
+  }
+  @keyframes flota { 50% { transform:translateY(-4px); } }
+
+  /* ── Pantallitas (barra flotante y descanso visual) ──────────── */
+  .pantallita { display:flex;flex-direction:column;align-items:center; }
+  .pb-pantalla {
+    position:relative;width:min(100%, 270px);aspect-ratio:16/10;border-radius:12px;overflow:hidden;
+    background:#2a2340;box-shadow:0 0 0 5px var(--bg3), 0 12px 26px rgba(0,0,0,.28);
+  }
+  .pb-fondo { position:absolute;inset:0;filter:saturate(.85);opacity:.75; }
+  .pb-pie { width:44px;height:12px;background:var(--bg3);margin-top:5px;clip-path:polygon(26% 0,74% 0,84% 100%,16% 100%); }
+  .pb-base { width:84px;height:5px;border-radius:999px;background:var(--bg3); }
+  .pb-barra, .pb-halo { position:absolute;transition:all .45s var(--spring); }
+  .pb-barra { border-radius:999px;box-shadow:0 0 8px rgba(0,0,0,.35); }
+  .pb-pantalla:hover .pb-barra { opacity:1 !important; }
+  .pb-halo {
+    border:1.5px dashed color-mix(in srgb, #fff 55%, transparent);
+    background:color-mix(in srgb, #fff 8%, transparent);opacity:.8;
+  }
+
+  /* Los ojos del descanso visual: parpadean y miran a un lado y a otro. */
+  .ojos { position:absolute;display:flex;gap:calc(var(--s) * .2);transition:all .5s var(--spring); }
+  .ojos i {
+    width:var(--s);height:calc(var(--s) * .64);border-radius:50% / 58%;background:#fff;position:relative;overflow:hidden;
+    box-shadow:0 2px 6px rgba(0,0,0,.35);animation:parpadeo 4.2s infinite;
+  }
+  .ojos i::after {
+    content:'';position:absolute;top:50%;left:50%;width:46%;aspect-ratio:1;border-radius:50%;
+    background:#1d1d1f;transform:translate(-50%, -50%);animation:mirar 4.2s ease-in-out infinite;
+  }
+  @keyframes parpadeo { 0%, 46%, 54%, 100% { transform:scaleY(1); } 50% { transform:scaleY(.08); } }
+  @keyframes mirar { 0%, 20% { transform:translate(-50%, -50%); } 30%, 60% { transform:translate(-95%, -50%); } 70%, 100% { transform:translate(-5%, -50%); } }
 
   /* ── Botones grandes ───────────────────────────────────────── */
   .btn-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
   .big-btn {
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-    background:var(--bg2);border:1px solid var(--border);border-radius:14px;
-    color:var(--text);font-size:12.5px;font-weight:600;padding:18px 10px;
+    background:var(--bg2);border:none;border-radius:18px;
+    color:var(--text);font-size:13px;font-weight:600;padding:18px 10px;
     cursor:pointer;-webkit-app-region:no-drag;transition:all .16s;
   }
   .big-btn svg { color:var(--accent);transition:transform .2s; }
@@ -233,201 +370,77 @@
 
   <div class="app-title">Ajustes</div>
 
-  <!-- ── Avisos ─────────────────────────────────────────────── -->
-  <div class="section">
-    <div class="section-label">Avisos</div>
-    <div class="card">
-      <div class="row">
-        <div class="row-text">
-          <span class="row-title">Frecuencia</span>
-          <span class="row-desc">Cada cuánto sale el recordatorio mientras hay una tarea activa.</span>
-        </div>
-        <input type="number" class="num-input" id="reminderMinutes" value="10" min="1" max="120">
-        <span class="unit">min</span>
-      </div>
-      <div class="row">
-        <div class="row-text">
-          <span class="row-title">Ocultar solo</span>
-          <span class="row-desc">Si lo apagas, el aviso se queda hasta que lo cierres.</span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="widgetAutoHide">
-          <span class="switch-track"></span>
-          <span class="switch-knob"></span>
-        </label>
-      </div>
-      <div class="row-sub" id="autohideSliderWrap">
-        <span class="sub-label">Se oculta tras <span id="autohideValueLabel">10s</span></span>
-        <input type="range" id="autohideRange" min="2" max="60" step="1" value="10">
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Archivador ─────────────────────────────────────────── -->
-  <div class="section">
-    <div class="section-label">Archivador</div>
-    <div class="card">
-      <div class="row">
-        <div class="row-text">
-          <span class="row-title">Archivar tras</span>
-          <span class="row-desc">Una tarea sin usar ese tiempo se aparta a un "Archivador" en Guardadas, fuera de las secciones normales. 0 = no archivar nunca.</span>
-        </div>
-        <input type="number" class="num-input" id="archiveDays" value="30" min="0" max="365">
-        <span class="unit">días</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Hora de salida ─────────────────────────────────────── -->
-  <div class="section">
-    <div class="section-label">Hora de salida</div>
-    <div class="card">
-      <div class="row">
-        <div class="row-text">
-          <span class="row-title">Avisarme al salir</span>
-          <span class="row-desc">Si a esa hora sigues con una tarea en marcha, te aviso para que la pares o la cierres antes de irte.</span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="leaveEnabled">
-          <span class="switch-track"></span>
-          <span class="switch-knob"></span>
-        </label>
-      </div>
-      <div class="row-sub" id="leaveOptionsWrap">
-        <div class="day-row">
-          <span class="day-name" style="font-weight:600">Cerrar las tareas automáticamente</span>
-          <input type="checkbox" class="day-check" id="leaveAutoStop">
-        </div>
-        <span class="sub-label" style="margin:-4px 0 4px">Si lo marcas, a esa hora paro yo la tarea que siga en marcha y te lo digo. Si no, solo te aviso y decides tú.</span>
-        <div class="day-row">
-          <span class="day-name" style="font-weight:600">Todos los días</span>
-          <input type="checkbox" class="day-check" id="leaveSameEveryDay">
-        </div>
-        <div class="day-row" id="leaveSingleRow">
-          <span class="day-name">Salgo a las</span>
-          <input type="time" class="time-input" id="leaveTime" value="18:00">
-        </div>
-        <div id="leaveDaysRows" style="display:none;flex-direction:column;gap:9px"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Calendario ─────────────────────────────────────────── -->
-  <div class="section">
-    <div class="section-label">Calendario</div>
-    <div class="card">
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:11px">
-        <div class="row-text">
-          <span class="row-title">Días que se ven</span>
-          <span class="row-desc">Quita los que no trabajes y las columnas se reparten el hueco. Si una semana suelta necesitas meter un sábado, se hace desde el botón "Días" del propio calendario, solo para esa semana.</span>
-        </div>
-        <div class="seg" id="weekDaysSeg" style="flex-wrap:wrap">
-          <button type="button" data-day="1">Lun</button>
-          <button type="button" data-day="2">Mar</button>
-          <button type="button" data-day="3">Mié</button>
-          <button type="button" data-day="4">Jue</button>
-          <button type="button" data-day="5">Vie</button>
-          <button type="button" data-day="6">Sáb</button>
-          <button type="button" data-day="0">Dom</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Enlace para imputar ────────────────────────────────── -->
-  <div class="section">
-    <div class="section-label">Enlace para imputar</div>
-    <div class="card">
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:11px">
-        <div class="row-text">
-          <span class="row-title">A dónde imputas de verdad</span>
-          <span class="row-desc">Las direcciones de los sitios donde metes las horas (el portal de tu empresa, una hoja de cálculo...). Puedes poner los que quieras: con uno solo, el botón "Imputar" del Panel y del Calendario te lleva directo; con varios, te deja elegir a cuál ir o abrirlos todos de golpe.</span>
-        </div>
-        <div id="imputeList" style="display:flex;flex-direction:column;gap:8px"></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-ghost" onclick="anadirImpute()" style="white-space:nowrap;padding:9px 14px;display:flex;align-items:center;gap:6px">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-            Añadir enlace
-          </button>
-          <button class="btn-ghost" onclick="probarImpute()" style="white-space:nowrap;padding:9px 14px">Probar</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Descansa la vista (20-20-20) ───────────────────────── -->
-  <div class="section">
-    <div class="section-label">Descansa la vista</div>
-    <div class="card">
-      <div class="row">
-        <div class="row-text">
-          <span class="row-title">Regla 20-20-20</span>
-          <span class="row-desc">Lo que recomiendan los oftalmólogos: cada 20 minutos, mira 20 segundos a algo que esté a unos 6 metros. Relaja el músculo del ojo. Aparecen unos ojos flotantes con la cuenta atrás; si molestan, un clic los quita hasta el siguiente aviso.</span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="eyeCareEnabled">
-          <span class="switch-track"></span>
-          <span class="switch-knob"></span>
-        </label>
-      </div>
-      <div class="row-sub" id="eyeCareWrap">
-        <span class="sub-label">Avisarme cada · <span id="eyeCareEveryLabel">20 min</span></span>
-        <input type="range" id="eyeCareEvery" min="1" max="120" step="1" value="20">
-
-        <span class="sub-label">Mirar a lo lejos durante · <span id="eyeCareRestLabel">20 s</span></span>
-        <input type="range" id="eyeCareRest" min="5" max="120" step="5" value="20">
-
-        <span class="sub-label">Dónde aparecen</span>
-        <div class="seg" id="eyeCarePosSeg" style="flex-wrap:wrap">
-          <button data-pos="topLeft">↖</button>
-          <button data-pos="top">↑</button>
-          <button data-pos="topRight">↗</button>
-          <button data-pos="bottomLeft">↙</button>
-          <button data-pos="bottom">↓</button>
-          <button data-pos="bottomRight">↘</button>
-        </div>
-
-        <span class="sub-label">Tamaño · <span id="eyeCareSizeLabel">150px</span></span>
-        <input type="range" id="eyeCareSize" min="80" max="420" step="10" value="150">
-
-        <button class="btn-ghost" onclick="previewEyeCare()" style="align-self:flex-start;padding:8px 14px">Ver cómo queda</button>
-      </div>
-    </div>
-  </div>
+  <!-- 2.8.3: cada ajuste con su icono y como mucho una línea corta de explicación. -->
 
   <!-- ── Apariencia ─────────────────────────────────────────── -->
   <div class="section">
     <div class="section-label">Apariencia</div>
     <div class="card">
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:12px">
-        <div class="row-text">
-          <span class="row-title">Tema de color</span>
-          <span class="row-desc">Se aplica al instante a toda la app.</span>
+      <!-- La app en formas: cambia en vivo con el tema, el acento y el cristal. -->
+      <div class="mini" id="mini" aria-hidden="true">
+        <div class="mini-fondo"><i></i><i></i><i></i><i></i></div>
+        <div class="mini-ventana">
+          <div class="mini-barra"><b></b><b></b><b></b></div>
+          <div class="mini-cal">
+            <span style="--x:1;--y:1;--h:2;--c:var(--accent2)"></span>
+            <span style="--x:1;--y:4;--h:2;--c:var(--accent-soft-2)"></span>
+            <span style="--x:2;--y:2;--h:3;--c:var(--accent-soft-2)"></span>
+            <span style="--x:2;--y:6;--h:1;--c:var(--bg3)"></span>
+            <span style="--x:3;--y:1;--h:1;--c:var(--bg3)"></span>
+            <span style="--x:3;--y:3;--h:3;--c:var(--accent2)"></span>
+            <span style="--x:4;--y:2;--h:2;--c:var(--accent)"></span>
+            <span style="--x:4;--y:5;--h:2;--c:var(--accent-soft-2)"></span>
+            <span style="--x:5;--y:1;--h:2;--c:var(--bg3)"></span>
+            <span style="--x:5;--y:4;--h:2;--c:var(--accent2)"></span>
+          </div>
+        </div>
+        <div class="mini-panel">
+          <div class="mp-linea"></div>
+          <div class="mp-reloj"></div>
+          <div class="mp-pildora on"><i></i><s></s></div>
+          <div class="mp-pildora"><i style="--c:#5b8cff"></i><s></s></div>
+          <div class="mp-pildora"><i style="--c:#30c48d"></i><s></s></div>
+          <div class="mp-boton"><s></s></div>
+        </div>
+        <div class="mini-burbuja"><s></s><s></s></div>
+      </div>
+      <div class="row col">
+        <div class="row-head">
+          <span class="ico" data-ico="tema" style="--ic:#ff8a3d"></span>
+          <div class="row-text"><span class="row-title">Tema</span></div>
         </div>
         <div class="theme-grid" id="themeGrid"></div>
       </div>
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:12px">
-        <div class="row-text">
-          <span class="row-title">Color de acento</span>
-          <span class="row-desc">Botones y resaltados, independiente del fondo.</span>
+      <div class="row col">
+        <div class="row-head">
+          <span class="ico" data-ico="acento" style="--ic:#ff5e8a"></span>
+          <div class="row-text">
+            <span class="row-title">Color de acento</span>
+            <span class="row-desc">Botones y resaltados</span>
+          </div>
         </div>
-        <div class="swatches" id="accentSwatches"></div>
+        <div class="acentos" id="accentSwatches"></div>
       </div>
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:10px">
-        <div class="row-text">
-          <span class="row-title">Fondo</span>
-          <span class="row-desc">De translúcida (se ve el escritorio) a opaca.</span>
+      <div class="row col">
+        <div class="row-head">
+          <span class="ico" data-ico="panel" style="--ic:#5b8cff"></span>
+          <div class="row-text">
+            <span class="row-title">Transparencia del panel</span>
+            <span class="row-desc">Al subirla, el panel lateral es de cristal</span>
+          </div>
         </div>
         <div class="range-row">
-          <span class="unit">Trans.</span>
+          <span class="unit">Mate</span>
+          <!-- El deslizador va al revés que el ajuste guardado (bgOpacity: 100 = opaco). -->
           <input type="range" id="bgOpacity" min="0" max="100" step="5">
-          <span class="unit">Opaca</span>
+          <span class="unit">Cristal</span>
         </div>
       </div>
       <div class="row">
+        <span class="ico" data-ico="difuminar" style="--ic:#8f8f99"></span>
         <div class="row-text">
           <span class="row-title">Difuminar el fondo</span>
-          <span class="row-desc">Desenfoca lo que hay detrás de la app. Lo hace Windows, así que la intensidad la marca el sistema: aquí se enciende o se apaga.</span>
+          <span class="row-desc">Desenfoque de Windows</span>
         </div>
         <label class="switch">
           <input type="checkbox" id="blurEnabled">
@@ -436,9 +449,10 @@
         </label>
       </div>
       <div class="row">
+        <span class="ico" data-ico="cristal" style="--ic:#2bb8e0"></span>
         <div class="row-text">
           <span class="row-title">Cristal líquido</span>
-          <span class="row-desc">Los bocadillos y el menú del calendario doblan lo que hay detrás, como un cristal. Si lo apagas, se quedan esmerilados.</span>
+          <span class="row-desc">En bocadillos y menús</span>
         </div>
         <label class="switch">
           <input type="checkbox" id="liquidGlass">
@@ -447,9 +461,10 @@
         </label>
       </div>
       <div class="row">
+        <span class="ico" data-ico="colores" style="--ic:#b569ff"></span>
         <div class="row-text">
           <span class="row-title">Colores manuales</span>
-          <span class="row-desc">Elegir tú el color de cada tarea nueva.</span>
+          <span class="row-desc">Eliges el color de cada tarea nueva</span>
         </div>
         <label class="switch">
           <input type="checkbox" id="manualColors">
@@ -460,31 +475,180 @@
     </div>
   </div>
 
-  <!-- ── Barra flotante ─────────────────────────────────────── -->
+  <!-- ── Avisos ─────────────────────────────────────────────── -->
   <div class="section">
-    <div class="section-label">Actualizaciones</div>
+    <div class="section-label">Avisos</div>
     <div class="card">
       <div class="row">
+        <span class="ico" data-ico="campana" style="--ic:#ff5a52"></span>
         <div class="row-text">
-          <span class="row-title">Betatester</span>
-          <span class="row-desc">Recibe todas las versiones nada más publicarse, incluidas las de prueba. Si lo dejas apagado, solo llegarán las marcadas como estables.</span>
+          <span class="row-title">Recordatorio</span>
+          <span class="row-desc">Mientras haya una tarea en marcha</span>
+        </div>
+        <input type="number" class="num-input" id="reminderMinutes" value="10" min="1" max="120">
+        <span class="unit">min</span>
+      </div>
+      <div class="row-sub open">
+        <div class="campo">
+          <div class="campo-top"><span class="sub-label">Tamaño del recordatorio</span><span class="valor" id="widgetScaleLabel">100%</span></div>
+          <input type="range" id="widgetScale" min="80" max="150" step="5" value="100">
+        </div>
+        <button class="btn-ghost" onclick="ipcRenderer.send('action', { type:'preview-widget' })" style="align-self:flex-start;padding:8px 14px">Ver cómo queda</button>
+      </div>
+      <div class="row">
+        <span class="ico" data-ico="reloj" style="--ic:#8f8f99"></span>
+        <div class="row-text">
+          <span class="row-title">Ocultar solo</span>
+          <span class="row-desc">Si no, se queda hasta que lo cierres</span>
         </div>
         <label class="switch">
-          <input type="checkbox" id="betaUpdates">
+          <input type="checkbox" id="widgetAutoHide">
           <span class="switch-track"></span>
           <span class="switch-knob"></span>
         </label>
       </div>
+      <div class="row-sub" id="autohideSliderWrap">
+        <div class="campo">
+          <div class="campo-top"><span class="sub-label">Se oculta tras</span><span class="valor" id="autohideValueLabel">10s</span></div>
+          <input type="range" id="autohideRange" min="2" max="60" step="1" value="10">
+        </div>
+      </div>
+      <div class="row">
+        <span class="ico" data-ico="salida" style="--ic:#ff9f0a"></span>
+        <div class="row-text">
+          <span class="row-title">Aviso al salir</span>
+          <span class="row-desc">Si sigues con una tarea en marcha</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="leaveEnabled">
+          <span class="switch-track"></span>
+          <span class="switch-knob"></span>
+        </label>
+      </div>
+      <div class="row-sub" id="leaveOptionsWrap">
+        <div class="day-row">
+          <span class="day-name">Pararla yo a esa hora</span>
+          <input type="checkbox" class="day-check" id="leaveAutoStop" title="Si no, solo te aviso">
+        </div>
+        <div class="day-row">
+          <span class="day-name">La misma hora todos los días</span>
+          <input type="checkbox" class="day-check" id="leaveSameEveryDay">
+        </div>
+        <div class="day-row" id="leaveSingleRow">
+          <span class="day-name">Salgo a las</span>
+          <input type="time" class="time-input" id="leaveTime" value="18:00">
+        </div>
+        <div id="leaveDaysRows" style="display:none;flex-direction:column;gap:9px"></div>
+      </div>
+      <div class="row">
+        <span class="ico" data-ico="ojo" style="--ic:#30c48d"></span>
+        <div class="row-text">
+          <span class="row-title">Descanso visual</span>
+          <span class="row-desc">Cada rato, mirar lejos unos segundos</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="eyeCareEnabled">
+          <span class="switch-track"></span>
+          <span class="switch-knob"></span>
+        </label>
+      </div>
+      <div class="row-sub" id="eyeCareWrap">
+        <div class="pantallita" aria-hidden="true">
+          <div class="pb-pantalla" id="ojosPantalla">
+            <div class="pb-fondo"><i></i><i></i><i></i><i></i></div>
+            <div class="ojos" id="ojosDibujo"><i></i><i></i></div>
+          </div>
+          <div class="pb-pie"></div><div class="pb-base"></div>
+        </div>
+        <div class="campo">
+          <div class="campo-top"><span class="sub-label">Cada</span><span class="valor" id="eyeCareEveryLabel">20 min</span></div>
+          <input type="range" id="eyeCareEvery" min="1" max="120" step="1" value="20">
+        </div>
+        <div class="campo">
+          <div class="campo-top"><span class="sub-label">Durante</span><span class="valor" id="eyeCareRestLabel">20 s</span></div>
+          <input type="range" id="eyeCareRest" min="5" max="120" step="5" value="20">
+        </div>
+        <div class="campo">
+          <span class="sub-label">Dónde aparecen</span>
+          <div class="seg" id="eyeCarePosSeg">
+            <button data-pos="topLeft">↖</button>
+            <button data-pos="top">↑</button>
+            <button data-pos="topRight">↗</button>
+            <button data-pos="bottomLeft">↙</button>
+            <button data-pos="bottom">↓</button>
+            <button data-pos="bottomRight">↘</button>
+          </div>
+        </div>
+        <div class="day-row">
+          <span class="day-name">Solo los ojos, sin fondo</span>
+          <input type="checkbox" class="day-check" id="eyeCareSoloOjos">
+        </div>
+        <div class="campo">
+          <div class="campo-top"><span class="sub-label">Tamaño</span><span class="valor" id="eyeCareSizeLabel">150px</span></div>
+          <input type="range" id="eyeCareSize" min="80" max="420" step="10" value="150">
+        </div>
+        <button class="btn-ghost" onclick="previewEyeCare()" style="align-self:flex-start;padding:8px 14px">Ver cómo queda</button>
+      </div>
     </div>
   </div>
 
+  <!-- ── Calendario ─────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Calendario</div>
+    <div class="card">
+      <div class="row col">
+        <div class="row-head">
+          <span class="ico" data-ico="calendario" style="--ic:#ff5a52"></span>
+          <div class="row-text"><span class="row-title">Días que se ven</span></div>
+        </div>
+        <div class="seg" id="weekDaysSeg">
+          <button type="button" data-day="1">Lun</button>
+          <button type="button" data-day="2">Mar</button>
+          <button type="button" data-day="3">Mié</button>
+          <button type="button" data-day="4">Jue</button>
+          <button type="button" data-day="5">Vie</button>
+          <button type="button" data-day="6">Sáb</button>
+          <button type="button" data-day="0">Dom</button>
+        </div>
+      </div>
+      <div class="row col">
+        <div class="row-head">
+          <span class="ico" data-ico="enlace" style="--ic:#4c8dff"></span>
+          <div class="row-text">
+            <span class="row-title">Dónde imputas</span>
+            <span class="row-desc">El botón «Imputar» te lleva aquí</span>
+          </div>
+        </div>
+        <div id="imputeList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-ghost" onclick="anadirImpute()" style="white-space:nowrap;padding:9px 14px;display:flex;align-items:center;gap:6px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Añadir enlace
+          </button>
+          <button class="btn-ghost" onclick="probarImpute()" style="white-space:nowrap;padding:9px 14px">Probar</button>
+        </div>
+      </div>
+      <div class="row">
+        <span class="ico" data-ico="archivo" style="--ic:#a2845e"></span>
+        <div class="row-text">
+          <span class="row-title">Archivar sin usar</span>
+          <span class="row-desc">0 = no archivar nunca</span>
+        </div>
+        <input type="number" class="num-input" id="archiveDays" value="30" min="0" max="365">
+        <span class="unit">días</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Barra flotante ─────────────────────────────────────── -->
   <div class="section">
     <div class="section-label">Barra flotante</div>
     <div class="card">
       <div class="row">
+        <span class="ico" data-ico="barra" style="--ic:#7a6cff"></span>
         <div class="row-text">
           <span class="row-title">Modo barra flotante</span>
-          <span class="row-desc">Una barra en el borde de la pantalla: al pulsarla se despliega la app y todo se abre dentro, sin ventanas sueltas.</span>
+          <span class="row-desc">La app sale desde un borde de la pantalla</span>
         </div>
         <label class="switch">
           <input type="checkbox" id="dockMode">
@@ -493,54 +657,79 @@
         </label>
       </div>
       <div class="row-sub" id="dockOptionsWrap">
-        <span class="sub-label">Borde de la pantalla</span>
-        <div class="seg" id="dockAnchorSeg">
-          <button type="button" data-anchor="left" onclick="setDockAnchor('left')">Izq.</button>
-          <button type="button" data-anchor="right" onclick="setDockAnchor('right')">Der.</button>
-          <button type="button" data-anchor="top" onclick="setDockAnchor('top')">Arriba</button>
-          <button type="button" data-anchor="bottom" onclick="setDockAnchor('bottom')">Abajo</button>
+        <!-- La barrita, dibujada en una pantalla de juguete: se mueve con cada ajuste. -->
+        <div class="pantallita" aria-hidden="true">
+          <div class="pb-pantalla" id="pbPantalla" title="Pasa el ratón para verla encendida">
+            <div class="pb-fondo"><i></i><i></i><i></i><i></i></div>
+            <div class="pb-halo" id="pbHalo"></div>
+            <div class="pb-barra" id="pbBarra"></div>
+          </div>
+          <div class="pb-pie"></div><div class="pb-base"></div>
         </div>
-
-        <span class="sub-label">Color de la barrita</span>
-        <div class="swatches" id="dockColorSwatches"></div>
-        <label class="custom-color">
-          <input type="color" id="dockColorCustom" value="#ffffff">
-          <span>Elegir otro color…</span>
-        </label>
-
-        <span class="sub-label">Largo · <span id="dockBarLengthLabel">110px</span></span>
-        <input type="range" id="dockBarLength" min="30" max="600" step="5" value="110">
-
-        <span class="sub-label">Posición en el borde · <span id="dockBarPosLabel">50%</span></span>
-        <input type="range" id="dockBarPos" min="0" max="100" step="1" value="50">
-
-        <span class="sub-label">Grosor · <span id="dockBarWidthLabel">7px</span></span>
-        <input type="range" id="dockBarWidth" min="3" max="24" step="1" value="7">
-
-        <span class="sub-label">Separación del borde · <span id="dockBarOffsetLabel">4px</span></span>
-        <input type="range" id="dockBarOffset" min="0" max="120" step="1" value="4">
-
-        <span class="sub-label">Se enciende a · <span id="dockNearDistanceLabel">45px</span> del ratón</span>
-        <input type="range" id="dockNearDistance" min="10" max="200" step="5" value="45">
-
-        <span class="sub-label">Opacidad en reposo · <span id="dockBarOpacityLabel">30%</span></span>
-        <input type="range" id="dockBarOpacity" min="5" max="100" step="1" value="30">
-
-        <span class="sub-label">Pantalla</span>
-        <select id="dockDisplay"></select>
-
-        <span class="sub-label">Cómo se esconde el panel</span>
-        <div class="seg" id="dockCloseSeg">
-          <button type="button" data-mode="button" onclick="setCloseMode('button')">Con el botón</button>
-          <button type="button" data-mode="clickOutside" onclick="setCloseMode('clickOutside')">Al clicar fuera</button>
-          <button type="button" data-mode="mouseLeave" onclick="setCloseMode('mouseLeave')">Al salir el ratón</button>
+        <div class="campo">
+          <span class="sub-label">Borde</span>
+          <div class="seg" id="dockAnchorSeg">
+            <button type="button" data-anchor="left" onclick="setDockAnchor('left')">Izq.</button>
+            <button type="button" data-anchor="right" onclick="setDockAnchor('right')">Der.</button>
+            <button type="button" data-anchor="top" onclick="setDockAnchor('top')">Arriba</button>
+            <button type="button" data-anchor="bottom" onclick="setDockAnchor('bottom')">Abajo</button>
+          </div>
         </div>
-        <div id="dockCloseSecondsRow" style="display:none;flex-direction:column;gap:6px">
-          <span class="sub-label">Segundos con el ratón fuera · <span id="dockCloseSecondsLabel">3s</span></span>
+        <div class="campo">
+          <span class="sub-label">Color de la barrita</span>
+          <div class="swatches" id="dockColorSwatches"></div>
+          <label class="custom-color">
+            <input type="color" id="dockColorCustom" value="#ffffff">
+            <span>Otro color…</span>
+          </label>
+          <div class="day-row">
+            <span class="day-name">De cristal</span>
+            <input type="checkbox" class="day-check" id="dockBarGlass">
+          </div>
+        </div>
+        <div class="rejilla">
+          <div class="campo">
+            <div class="campo-top"><span class="sub-label">Largo</span><span class="valor" id="dockBarLengthLabel">110px</span></div>
+            <input type="range" id="dockBarLength" min="30" max="600" step="5" value="110">
+          </div>
+          <div class="campo">
+            <div class="campo-top"><span class="sub-label">Grosor</span><span class="valor" id="dockBarWidthLabel">7px</span></div>
+            <input type="range" id="dockBarWidth" min="3" max="24" step="1" value="7">
+          </div>
+          <div class="campo">
+            <div class="campo-top"><span class="sub-label">Posición</span><span class="valor" id="dockBarPosLabel">50%</span></div>
+            <input type="range" id="dockBarPos" min="0" max="100" step="1" value="50">
+          </div>
+          <div class="campo">
+            <div class="campo-top"><span class="sub-label">Separación</span><span class="valor" id="dockBarOffsetLabel">4px</span></div>
+            <input type="range" id="dockBarOffset" min="0" max="120" step="1" value="4">
+          </div>
+          <div class="campo">
+            <div class="campo-top"><span class="sub-label">Se enciende a</span><span class="valor" id="dockNearDistanceLabel">45px</span></div>
+            <input type="range" id="dockNearDistance" min="10" max="200" step="5" value="45">
+          </div>
+          <div class="campo">
+            <div class="campo-top"><span class="sub-label">En reposo</span><span class="valor" id="dockBarOpacityLabel">30%</span></div>
+            <input type="range" id="dockBarOpacity" min="5" max="100" step="1" value="30">
+          </div>
+        </div>
+        <div class="campo">
+          <span class="sub-label">Pantalla</span>
+          <select id="dockDisplay"></select>
+        </div>
+        <div class="campo">
+          <span class="sub-label">El panel se esconde</span>
+          <div class="seg" id="dockCloseSeg">
+            <button type="button" data-mode="button" onclick="setCloseMode('button')">Con el botón</button>
+            <button type="button" data-mode="clickOutside" onclick="setCloseMode('clickOutside')">Al clicar fuera</button>
+            <button type="button" data-mode="mouseLeave" onclick="setCloseMode('mouseLeave')">Al salir el ratón</button>
+          </div>
+        </div>
+        <div class="campo" id="dockCloseSecondsRow" style="display:none">
+          <div class="campo-top"><span class="sub-label">Con el ratón fuera</span><span class="valor" id="dockCloseSecondsLabel">3s</span></div>
           <input type="range" id="dockCloseSeconds" min="0" max="15" step="0.5" value="3">
         </div>
-
-        <span class="row-desc">El tamaño del panel se cambia arrastrando su borde interior cuando está desplegado.</span>
+        <span class="nota">El ancho del panel se cambia arrastrando su borde.</span>
       </div>
     </div>
   </div>
@@ -550,12 +739,25 @@
     <div class="section-label">General</div>
     <div class="card">
       <div class="row">
+        <span class="ico" data-ico="encender" style="--ic:#30c48d"></span>
         <div class="row-text">
           <span class="row-title">Abrir al encender</span>
-          <span class="row-desc">Arranca sola con Windows, en la bandeja.</span>
+          <span class="row-desc">Con Windows, en la bandeja</span>
         </div>
         <label class="switch">
           <input type="checkbox" id="openAtLogin">
+          <span class="switch-track"></span>
+          <span class="switch-knob"></span>
+        </label>
+      </div>
+      <div class="row">
+        <span class="ico" data-ico="beta" style="--ic:#b569ff"></span>
+        <div class="row-text">
+          <span class="row-title">Betatester</span>
+          <span class="row-desc">Las versiones de prueba, antes que nadie</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="betaUpdates">
           <span class="switch-track"></span>
           <span class="switch-knob"></span>
         </label>
@@ -594,9 +796,12 @@
   <div class="section">
     <div class="section-label">Cuenta</div>
     <div class="card">
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:12px">
-        <div class="account-status" id="accountStatus">Trabajando en local (sin cuenta)</div>
-        <button class="btn-ghost" id="accountBtn" style="padding:11px;border-radius:10px" onclick="openSync()">Iniciar sesión para sincronizar…</button>
+      <div class="row col">
+        <div class="row-head">
+          <span class="ico" data-ico="nube" style="--ic:#4c8dff"></span>
+          <div class="account-status" id="accountStatus">Trabajando en local (sin cuenta)</div>
+        </div>
+        <button class="btn-ghost" id="accountBtn" style="padding:11px;border-radius:12px" onclick="openSync()">Iniciar sesión para sincronizar…</button>
       </div>
     </div>
   </div>
@@ -638,81 +843,123 @@
 const { ipcRenderer } = require('electron');
 
 const DOCK_COLORS = ['#ffffff','#cbd5e1','#94a3b8','#6366f1','#38bdf8','#34d399','#fbbf24','#fb7185','#a78bfa'];
-// Mismo orden y claves que THEMES en main.js (bg de muestra + acento).
+// Mismo orden y claves que THEMES en themes.js (muestra de fondo + su acento).
+// Los «con brillo» se previsualizan con sus dos brillos de fondo.
+const brillo = (a, b, fondo) =>
+  `radial-gradient(circle at 22% 18%, ${a}, transparent 62%), radial-gradient(circle at 88% 92%, ${b}, transparent 58%), ${fondo}`;
 const THEME_LIST = [
-  // 2.8: los dos del rediseño van primero (Noche cálida es el de por defecto).
-  { key:'noche',   name:'Noche cálida', bg:'radial-gradient(circle at 30% 25%, #4a2a1c, #141013 70%)' },
-  { key:'luz',     name:'Luz',          bg:'radial-gradient(circle at 30% 25%, #ffd9bf, #f2ece7 70%)' },
-  { key:'indigo',  name:'Índigo',  bg:'#12121c' },
-  { key:'grafito', name:'Grafito', bg:'#101012' },
-  { key:'pizarra', name:'Pizarra', bg:'#181c24' },
-  { key:'oceano',  name:'Océano',  bg:'#0c1622' },
-  { key:'bosque',  name:'Bosque',  bg:'#0c1814' },
-  { key:'vino',    name:'Vino',    bg:'#1c0e14' },
-  { key:'ambar',   name:'Ámbar',   bg:'#1c140a' },
-  { key:'claro',   name:'Claro',   bg:'#f4f4f9' },
+  { key:'noche',      name:'Noche cálida', bg:brillo('#6b3620', '#36245a', '#141013'), acc:'#ff9f5a', grupo:'Con brillo' },
+  { key:'luz',        name:'Luz',          bg:brillo('#ffd2b3', '#ddd5ff', '#f7f3f0'), acc:'#ff8a3d' },
+  { key:'aurora',     name:'Aurora',       bg:brillo('#145c4c', '#2e2a6e', '#0b1317'), acc:'#22c39b' },
+  { key:'medianoche', name:'Medianoche',   bg:brillo('#24307a', '#4a1f66', '#0c0e1d'), acc:'#6f8cff' },
+  { key:'atardecer',  name:'Atardecer',    bg:brillo('#6e2440', '#6a4418', '#190d17'), acc:'#ff6f91' },
+  { key:'musgo',      name:'Musgo',        bg:brillo('#3e4a1c', '#4d3c14', '#0f130d'), acc:'#93b24a' },
+  { key:'lavanda',    name:'Lavanda',      bg:brillo('#d9ccff', '#ffd3ea', '#f5f2fb'), acc:'#8b6cff' },
+  { key:'menta',      name:'Menta',        bg:brillo('#bff0de', '#d3e3ff', '#eff7f3'), acc:'#1fb386' },
+  { key:'arena',      name:'Arena',        bg:brillo('#ffdcb0', '#ffd0c4', '#f7f1e8'), acc:'#d98a2b' },
+  { key:'indigo',  name:'Índigo',  bg:'#12121c', acc:'#6366f1', grupo:'Clásicos' },
+  { key:'grafito', name:'Grafito', bg:'#101012', acc:'#71717a' },
+  { key:'pizarra', name:'Pizarra', bg:'#181c24', acc:'#64748b' },
+  { key:'oceano',  name:'Océano',  bg:'#0c1622', acc:'#0284c7' },
+  { key:'bosque',  name:'Bosque',  bg:'#0c1814', acc:'#059669' },
+  { key:'vino',    name:'Vino',    bg:'#1c0e14', acc:'#e11d48' },
+  { key:'ambar',   name:'Ámbar',   bg:'#1c140a', acc:'#d97706' },
+  { key:'claro',   name:'Claro',   bg:'#f4f4f9', acc:'#4338ca' },
 ];
-// Mismas claves que ACCENTS en main.js. null = usar el que trae el tema.
+// Mismas claves que ACCENTS en themes.js. null = usar el que trae el tema.
 const ACCENT_LIST = [
-  { key:null,       name:'Del tema', color:null },
-  { key:'indigo',   color:'#6366f1' },
-  { key:'azul',     color:'#0284c7' },
-  { key:'turquesa', color:'#0d9488' },
-  { key:'verde',    color:'#059669' },
-  { key:'ambar',    color:'#d97706' },
-  { key:'naranja',  color:'#ff9f5a' },
-  { key:'rojo',     color:'#e11d48' },
-  { key:'rosa',     color:'#db2777' },
-  { key:'violeta',  color:'#7c3aed' },
-  { key:'gris',     color:'#71717a' },
+  { key:null,        name:'El del tema' },
+  { key:'naranja',   name:'Naranja',   c1:'#ffb383', c2:'#ff9f5a' },
+  { key:'melocoton', name:'Melocotón', c1:'#ffc6a0', c2:'#ff9b6a' },
+  { key:'coral',     name:'Coral',     c1:'#ffa494', c2:'#ff6f59' },
+  { key:'cereza',    name:'Cereza',    c1:'#ff9db0', c2:'#e23a5f' },
+  { key:'rojo',      name:'Rojo',      c1:'#fb7185', c2:'#e11d48' },
+  { key:'rosa',      name:'Rosa',      c1:'#f472b6', c2:'#db2777' },
+  { key:'fucsia',    name:'Fucsia',    c1:'#f5a3ff', c2:'#c13bdb' },
+  { key:'violeta',   name:'Violeta',   c1:'#a78bfa', c2:'#7c3aed' },
+  { key:'lavanda',   name:'Lavanda',   c1:'#c9b8ff', c2:'#9073ff' },
+  { key:'indigo',    name:'Índigo',    c1:'#818cf8', c2:'#6366f1' },
+  { key:'cielo',     name:'Cielo',     c1:'#9fd4ff', c2:'#4ba3f5' },
+  { key:'azul',      name:'Azul',      c1:'#38bdf8', c2:'#0284c7' },
+  { key:'turquesa',  name:'Turquesa',  c1:'#2dd4bf', c2:'#0d9488' },
+  { key:'menta',     name:'Menta',     c1:'#86f0d4', c2:'#22c39b' },
+  { key:'verde',     name:'Verde',     c1:'#34d399', c2:'#059669' },
+  { key:'lima',      name:'Lima',      c1:'#c8f170', c2:'#7cc316' },
+  { key:'oro',       name:'Oro',       c1:'#ffd66b', c2:'#e0a100' },
+  { key:'ambar',     name:'Ámbar',     c1:'#fbbf24', c2:'#d97706' },
+  { key:'gris',      name:'Gris',      c1:'#a1a1aa', c2:'#71717a' },
 ];
 let currentAccent = null;
 let dockAnchor = 'right';
 let dockColor = DOCK_COLORS[0];
 let currentTheme = 'indigo';
 
+// La miniapp da un pequeño respingo al cambiar de colores, para que se note dónde mirar.
+function latidoMini() {
+  const mini = document.getElementById('mini');
+  mini.classList.remove('pulso');
+  void mini.offsetWidth;
+  mini.classList.add('pulso');
+}
+
 function buildThemeGrid() {
   const grid = document.getElementById('themeGrid');
   grid.innerHTML = '';
   THEME_LIST.forEach(t => {
+    if (t.grupo) {
+      const sep = document.createElement('div');
+      sep.className = 'theme-sep';
+      sep.textContent = t.grupo;
+      grid.appendChild(sep);
+    }
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'theme-chip' + (t.key === currentTheme ? ' selected' : '');
-    chip.innerHTML = `<span class="theme-dot" style="background:${t.bg}"></span><span class="theme-name">${t.name}</span>`;
+    chip.innerHTML = `<span class="theme-dot" style="background:${t.bg};--acc:${t.acc}"></span><span class="theme-name">${t.name}</span>`;
     chip.onclick = () => {
       currentTheme = t.key;
       grid.querySelectorAll('.theme-chip').forEach(c => c.classList.remove('selected'));
       chip.classList.add('selected');
       ipcRenderer.send('action', { type:'set-theme', payload:{ theme: t.key } });   // en vivo
+      buildAccentSwatches();   // la bolita de "el del tema" cambia con él
+      latidoMini();
     };
     grid.appendChild(chip);
   });
 }
 
-// ---------- Aviso: auto-ocultar ----------
 function buildAccentSwatches() {
   const wrap = document.getElementById('accentSwatches');
   wrap.innerHTML = '';
+  const delTema = THEME_LIST.find(t => t.key === currentTheme) || THEME_LIST[0];
   ACCENT_LIST.forEach(a => {
     const sw = document.createElement('div');
-    sw.className = 'swatch' + (a.key === currentAccent ? ' selected' : '');
-    // "Del tema" se ve como un degradado neutro, para distinguirlo de un color concreto.
-    sw.style.background = a.color || 'linear-gradient(135deg, var(--text2), var(--bg3))';
-    sw.title = a.name || '';
+    sw.className = 'acento' + (a.key ? '' : ' auto') + (a.key === currentAccent ? ' selected' : '');
+    sw.style.setProperty('--a1', a.c1 || delTema.acc);
+    sw.style.setProperty('--a2', a.c2 || delTema.acc);
+    sw.title = a.name;
+    sw.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
     sw.onclick = () => {
       currentAccent = a.key;
-      wrap.querySelectorAll('.swatch').forEach(x => x.classList.remove('selected'));
+      wrap.querySelectorAll('.acento').forEach(x => x.classList.remove('selected'));
       sw.classList.add('selected');
       ipcRenderer.send('action', { type:'set-theme', payload:{ accent: a.key } });   // en vivo
+      latidoMini();
     };
     wrap.appendChild(sw);
   });
 }
 
+// ---------- Aviso: auto-ocultar ----------
 function updateAutohideVisibility() {
   document.getElementById('autohideSliderWrap').classList.toggle('open', document.getElementById('widgetAutoHide').checked);
 }
 document.getElementById('widgetAutoHide').addEventListener('change', updateAutohideVisibility);
+// Mientras se mueve, el recordatorio aparece (si no estaba) y cambia de tamaño en vivo.
+document.getElementById('widgetScale').addEventListener('input', (e) => {
+  document.getElementById('widgetScaleLabel').textContent = e.target.value + '%';
+  ipcRenderer.send('action', { type:'widget-escala-vivo', payload:{ value: parseInt(e.target.value) || 100 } });
+});
 document.getElementById('autohideRange').addEventListener('input', (e) => {
   document.getElementById('autohideValueLabel').textContent = e.target.value + 's';
 });
@@ -865,6 +1112,7 @@ function applyEyeCare(preview) {
     eyeCareRest: parseInt(document.getElementById('eyeCareRest').value) || 20,
     eyeCarePos,
     eyeCareSize: parseInt(document.getElementById('eyeCareSize').value) || 150,
+    eyeCareSoloOjos: document.getElementById('eyeCareSoloOjos').checked,
     preview: !!preview,
     previewSeconds: preview === 'largo' ? 6 : 3,
   } });
@@ -889,6 +1137,7 @@ document.getElementById('eyeCareSize').addEventListener('input', () => {
   document.getElementById('eyeCareSizeLabel').textContent = document.getElementById('eyeCareSize').value + 'px';
   applyEyeCare(true);
 });
+document.getElementById('eyeCareSoloOjos').addEventListener('change', () => applyEyeCare(true));
 document.querySelectorAll('#eyeCarePosSeg button').forEach(b => {
   b.addEventListener('click', () => {
     eyeCarePos = b.dataset.pos;
@@ -899,7 +1148,7 @@ document.querySelectorAll('#eyeCarePosSeg button').forEach(b => {
 
 // ---------- Fondo: vista previa en vivo ----------
 document.getElementById('bgOpacity').addEventListener('input', (e) => {
-  ipcRenderer.send('action', { type:'set-bg-opacity', payload:{ value: parseInt(e.target.value) || 0 } });
+  ipcRenderer.send('action', { type:'set-bg-opacity', payload:{ value: 100 - (parseInt(e.target.value) || 0) } });
 });
 
 // ---------- Barra flotante ----------
@@ -971,6 +1220,7 @@ function previewDock() {
     dockBarPos: parseInt(document.getElementById('dockBarPos').value),
     dockBarOffset: parseInt(document.getElementById('dockBarOffset').value) || 0,
     dockBarOpacity: parseInt(document.getElementById('dockBarOpacity').value) || 30,
+    dockBarGlass: document.getElementById('dockBarGlass').checked,
     dockNearDistance: parseInt(document.getElementById('dockNearDistance').value) || 45,
     dockDisplayId: sel ? Number(sel) : null,
     dockCloseMode,
@@ -990,6 +1240,7 @@ const PCT_SLIDERS = new Set(['dockBarOpacity','dockBarPos']);
   });
 });
 document.getElementById('dockDisplay').addEventListener('change', previewDock);
+document.getElementById('dockBarGlass').addEventListener('change', previewDock);
 
 let pendingDisplayId = null;
 function populateDisplays(selectedId) {
@@ -1018,6 +1269,105 @@ ipcRenderer.on('displays', (_, list) => {
   }
 });
 
+// ---------- Dibujos de los ajustes ----------
+// Iconos de las filas (trazo blanco sobre la baldosa de color de cada una).
+const ICONOS = {
+  tema: '<path d="M12 2a10 10 0 0 0 0 20c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H16a6 6 0 0 0 6-6C22 6 17.5 2 12 2z"/><circle cx="7.5" cy="11" r="1.3" fill="currentColor"/><circle cx="10" cy="6.8" r="1.3" fill="currentColor"/><circle cx="15" cy="7" r="1.3" fill="currentColor"/>',
+  acento: '<path d="M12 2.7s6.5 6.6 6.5 11.3a6.5 6.5 0 0 1-13 0C5.5 9.3 12 2.7 12 2.7z"/>',
+  panel: '<rect x="3" y="3" width="13" height="13" rx="3"/><rect x="8" y="8" width="13" height="13" rx="3" fill="currentColor" fill-opacity=".35"/>',
+  difuminar: '<circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="8.5" stroke-dasharray="1.6 3.2"/>',
+  cristal: '<path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M10 3 8 9l4 12 4-12-2-6"/>',
+  colores: '<path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L11 15.8 8.2 13z"/><path d="M7 14.5c-2 0-3 1.5-3 3.5 0 1-1 2-2 2 1 1.5 3 2 4.5 2 2.5 0 4.5-2 4.5-4.5"/>',
+  campana: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+  reloj: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  salida: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
+  ojo: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  calendario: '<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/>',
+  enlace: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  archivo: '<rect x="2" y="3" width="20" height="5" rx="1.5"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/>',
+  barra: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M15 3v18"/>',
+  encender: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+  beta: '<path d="M9 3h6M10 3v6.5L4.5 19a2 2 0 0 0 1.7 3h11.6a2 2 0 0 0 1.7-3L14 9.5V3"/><path d="M7 15h10"/>',
+  nube: '<path d="M17.5 19a4.5 4.5 0 1 0-1.2-8.8 6 6 0 0 0-11.6 1.8A3.5 3.5 0 0 0 6 19z"/>',
+};
+document.querySelectorAll('.ico[data-ico]').forEach(el => {
+  el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONOS[el.dataset.ico] || ''}</svg>`;
+});
+
+// Parte recorrida de cada deslizador, en color.
+function pintarRangos() {
+  document.querySelectorAll('input[type=range]').forEach(r => {
+    const min = Number(r.min) || 0, max = Number(r.max) || 100;
+    r.style.setProperty('--p', ((Number(r.value) - min) / (max - min || 1)) * 100 + '%');
+  });
+}
+
+// Miniapp: el panel se vuelve cristal con la transparencia (el mismo tinte que pone el
+// panel de verdad), esmerilado o claro según "Difuminar", y el bocadillo según "Cristal líquido".
+function pintarMini() {
+  const mini = document.getElementById('mini');
+  const cristal = (parseInt(document.getElementById('bgOpacity').value) || 0) / 100;
+  mini.style.setProperty('--mini-op', cristal < 0.005 ? 1 : 0.3 + 0.62 * (1 - cristal));
+  mini.classList.toggle('con-cristal', cristal >= 0.005);
+  mini.classList.toggle('sin-blur', !document.getElementById('blurEnabled').checked);
+  mini.classList.toggle('sin-liquido', !document.getElementById('liquidGlass').checked);
+}
+
+// La barrita en la pantalla de juguete, a escala (exagerada un poco para que se vea).
+function pintarBarra() {
+  const pant = document.getElementById('pbPantalla');
+  if (!pant.offsetWidth) return;   // con el modo barra apagado no se ve
+  const W = pant.clientWidth, H = pant.clientHeight, k = H / 1080 * 1.8;
+  const v = (id) => parseFloat(document.getElementById(id).value) || 0;
+  const vertical = dockAnchor === 'left' || dockAnchor === 'right';
+  const largo = Math.max(6, Math.min((vertical ? H : W) - 10, v('dockBarLength') * k));
+  const grosor = 2 + (v('dockBarWidth') - 3) * 0.35;
+  const sep = v('dockBarOffset') * k;
+  const cerca = v('dockNearDistance') * k;
+  const a = ((vertical ? H : W) - largo) * v('dockBarPos') / 100;
+  const r = vertical
+    ? { x: dockAnchor === 'left' ? sep : W - sep - grosor, y: a, w: grosor, h: largo }
+    : { x: a, y: dockAnchor === 'top' ? sep : H - sep - grosor, w: largo, h: grosor };
+  Object.assign(document.getElementById('pbBarra').style, {
+    left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px',
+    background: document.getElementById('dockBarGlass').checked
+      ? `color-mix(in srgb, ${dockColor} 40%, rgba(255,255,255,.12))`
+      : dockColor,
+    opacity: document.getElementById('dockBarGlass').checked ? Math.max(0.7, v('dockBarOpacity') / 100) : v('dockBarOpacity') / 100,
+  });
+  Object.assign(document.getElementById('pbHalo').style, {
+    left: (r.x - cerca) + 'px', top: (r.y - cerca) + 'px',
+    width: (r.w + cerca * 2) + 'px', height: (r.h + cerca * 2) + 'px', borderRadius: (cerca + grosor / 2) + 'px',
+  });
+}
+
+// Los ojos del descanso visual, en la esquina elegida y a su tamaño.
+const SITIO_OJOS = {
+  topLeft: [0.07, 0.1, 0], top: [0.5, 0.1, -0.5], topRight: [0.93, 0.1, -1],
+  bottomLeft: [0.07, 0.9, 0], bottom: [0.5, 0.9, -0.5], bottomRight: [0.93, 0.9, -1],
+};
+function pintarOjos() {
+  const pant = document.getElementById('ojosPantalla');
+  if (!pant.offsetWidth) return;
+  const ojos = document.getElementById('ojosDibujo');
+  const s = 14 + ((parseFloat(document.getElementById('eyeCareSize').value) || 150) - 80) / 340 * 28;
+  const [x, y, dx] = SITIO_OJOS[eyeCarePos] || SITIO_OJOS.top;
+  ojos.style.setProperty('--s', s + 'px');
+  ojos.style.left = x * pant.clientWidth + 'px';
+  ojos.style.top = y * pant.clientHeight + 'px';
+  ojos.style.transform = `translate(${dx * 100}%, ${y > 0.5 ? -100 : 0}%)`;
+}
+
+function pintarDibujos() { pintarRangos(); pintarMini(); pintarBarra(); pintarOjos(); }
+// Cualquier toque en los ajustes repinta los dibujos (es barato).
+['input', 'change', 'click'].forEach(ev => document.addEventListener(ev, () => requestAnimationFrame(pintarDibujos)));
+window.addEventListener('resize', pintarDibujos);
+
+// "Difuminar" se ve al momento en el cristal del panel lateral, como la transparencia.
+document.getElementById('blurEnabled').addEventListener('change', (e) => {
+  ipcRenderer.send('action', { type:'set-blur', payload:{ enabled: e.target.checked } });
+});
+
 // ---------- Carga de ajustes ----------
 ipcRenderer.on('settings', (_, s) => {
   document.getElementById('reminderMinutes').value = s.reminderMinutes || 10;
@@ -1025,13 +1375,17 @@ ipcRenderer.on('settings', (_, s) => {
   document.getElementById('widgetAutoHide').checked = !!s.widgetAutoHide;
   document.getElementById('manualColors').checked = s.colorMode === 'manual';
   document.getElementById('openAtLogin').checked = !!s.openAtLogin;
-  document.getElementById('bgOpacity').value = (s.bgOpacity == null ? 50 : s.bgOpacity);
+  document.getElementById('bgOpacity').value = 100 - (s.bgOpacity == null ? 85 : s.bgOpacity);
   document.getElementById('blurEnabled').checked = s.blurEnabled !== false;
   document.getElementById('liquidGlass').checked = s.liquidGlass !== false;
   document.getElementById('betaUpdates').checked = !!s.betaUpdates;
   tutorialSeen = s.tutorialSeenSteps || [];
   setTimeout(maybeStartTutorial, 60);   // tras pintar temas, colores y la barra flotante
+  setTimeout(pintarDibujos, 0);   // cuando ya están puestos todos los valores
 
+  const escala = Math.max(80, Math.min(150, Number(s.widgetScale) || 100));
+  document.getElementById('widgetScale').value = escala;
+  document.getElementById('widgetScaleLabel').textContent = escala + '%';
   const secs = Math.max(2, Math.min(60, s.widgetAutoHideSeconds || 10));
   document.getElementById('autohideRange').value = secs;
   document.getElementById('autohideValueLabel').textContent = secs + 's';
@@ -1050,6 +1404,8 @@ ipcRenderer.on('settings', (_, s) => {
   document.getElementById('eyeCareRestLabel').textContent = (s.eyeCareRest || 20) + ' s';
   document.getElementById('eyeCareSize').value = s.eyeCareSize || 150;
   document.getElementById('eyeCareSizeLabel').textContent = (s.eyeCareSize || 150) + 'px';
+  document.getElementById('eyeCareSoloOjos').checked = !!s.eyeCareSoloOjos;
+  document.getElementById('dockBarGlass').checked = s.dockBarGlass !== false;
   eyeCarePos = s.eyeCarePos || 'top';
   document.querySelectorAll('#eyeCarePosSeg button').forEach(b => b.classList.toggle('active', b.dataset.pos === eyeCarePos));
   updateEyeCareVisibility();
@@ -1105,7 +1461,7 @@ function save() {
     widgetAutoHideSeconds: parseInt(document.getElementById('autohideRange').value) || 10,
     colorMode: document.getElementById('manualColors').checked ? 'manual' : 'auto',
     openAtLogin: document.getElementById('openAtLogin').checked,
-    bgOpacity: parseInt(document.getElementById('bgOpacity').value) || 0,
+    bgOpacity: 100 - (parseInt(document.getElementById('bgOpacity').value) || 0),
     blurEnabled: document.getElementById('blurEnabled').checked,
     liquidGlass: document.getElementById('liquidGlass').checked,
     betaUpdates: document.getElementById('betaUpdates').checked,
@@ -1120,6 +1476,7 @@ function save() {
     dockBarPos: parseInt(document.getElementById('dockBarPos').value),
     dockBarOffset: parseInt(document.getElementById('dockBarOffset').value) || 0,
     dockBarOpacity: parseInt(document.getElementById('dockBarOpacity').value) || 30,
+    dockBarGlass: document.getElementById('dockBarGlass').checked,
     dockNearDistance: parseInt(document.getElementById('dockNearDistance').value) || 45,
     dockCloseMode,
     dockCloseSeconds: parseFloat(document.getElementById('dockCloseSeconds').value),

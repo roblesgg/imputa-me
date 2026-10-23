@@ -3,128 +3,288 @@
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="shared.css">
-<style>
-  html, body { width:100%;height:100%; }
-  body { border-radius:var(--radius);overflow:hidden; }
-
-  .card { width:100%;height:100%;padding:16px 20px;display:flex;flex-direction:column;gap:10px;position:relative;min-height:0; }
-
-  .header { display:flex;align-items:center;justify-content:space-between; }
-  .label { font-size:var(--font-xs);font-weight:var(--fw-bold);color:var(--text2);letter-spacing:.07em;text-transform:uppercase; }
-
-  .task-row { display:flex;align-items:center;gap:10px; }
-  .pulse-dot { width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(52,211,153,.5);animation:pulse 1.6s ease-in-out 3;flex-shrink:0; }
-  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)} 70%{box-shadow:0 0 0 7px rgba(52,211,153,0)} 100%{box-shadow:0 0 0 0 rgba(52,211,153,0)} }
-  .task-label { font-size:var(--font-lg);font-weight:var(--fw-semibold);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-  .task-meta { display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px; }
-  .widget-memo {
-    font-size:var(--font-xs); color:var(--text2); line-height:1.35;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
-  }
-
-  .time-row { display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;row-gap:2px; }
-  .time-big { font-size:28px;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums;letter-spacing:-.02em; }
-  .time-total { font-size:var(--font-sm);color:var(--text2);font-variant-numeric:tabular-nums; }
-
-  .actions { display:flex;gap:8px;-webkit-app-region:no-drag; }
-
-  .btn-w {
-    display:flex;align-items:center;gap:6px;
-    border-radius:9px;font-size:var(--font-sm);font-weight:var(--fw-semibold);padding:6px 14px;cursor:pointer;transition:all .15s;border:1px solid;
-  }
-  .btn-pause-w { background:rgba(248,113,113,.18);color:var(--danger);border-color:rgba(248,113,113,.3); }
-  .btn-pause-w:hover { background:rgba(248,113,113,.35); }
-  .btn-switch-w { background:color-mix(in srgb, var(--accent) 20%, transparent);color:var(--accent);border-color:color-mix(in srgb, var(--accent) 32%, transparent);flex:1; }
-  .btn-switch-w:hover { background:color-mix(in srgb, var(--accent) 34%, transparent); }
-</style>
-<!-- 2.8: estilo «Suave» (rediseño Mac). Va el último para mandar sobre lo de arriba. -->
 <link rel="stylesheet" href="mac.css">
+<style>
+  /* 2.8.3: el recordatorio es una tarjeta de cristal líquido en una ventana transparente.
+     Entra desde el borde de la pantalla como una gota que se abre en su sitio y se va igual
+     (brotar / sumir en glass.js); los textos llegan desde el fondo, de borrosos y
+     translúcidos a nítidos, y se van al revés. */
+  html, body { width:100%;height:100%;margin:0;overflow:hidden;background:transparent !important; }
+
+  .tarjeta {
+    position:absolute;right:20px;bottom:20px;width:330px;border-radius:34px;
+    color:var(--text);visibility:hidden;-webkit-app-region:no-drag;
+  }
+  .tarjeta.visible { visibility:visible; }
+  /* Sobre el cristal oscuro, letra clara (como en los bocadillos). */
+  :root:not([data-scheme="light"]) .tarjeta {
+    --text:#fffaf6; --text2:rgba(250,244,238,.78); --text3:rgba(250,244,238,.55);
+  }
+
+  /* Sin cristal líquido (apagado o sin WebGL): una tarjeta casi opaca que entra y sale
+     con la misma idea, en CSS. --dx / --dy: hacia el borde por el que entra. */
+  .tarjeta.sin-cristal {
+    background:color-mix(in srgb, var(--surface) 95%, transparent);
+    box-shadow:0 18px 40px rgba(0,0,0,.4), inset 0 0 0 1px var(--border);
+  }
+  .tarjeta.sin-cristal.brota { animation:brota .78s var(--spring) both; }
+  .tarjeta.sin-cristal.sume { animation:sume .56s cubic-bezier(.55,0,.8,.2) both; }
+  @keyframes brota {
+    0%   { transform:translate(var(--dx), var(--dy)) scale(.18, .3); border-radius:50%; opacity:0; }
+    12%  { opacity:1; }
+    50%  { transform:translate(0, 0) scale(1.08, .92); border-radius:34px; }
+    72%  { transform:scale(.98, 1.03); }
+    100% { transform:none; border-radius:34px; }
+  }
+  @keyframes sume {
+    0%   { transform:none; }
+    18%  { transform:scale(.95); }
+    100% { transform:translate(var(--dx), var(--dy)) scale(.16, .28); border-radius:50%; opacity:0; }
+  }
+
+  .contenido { position:relative;padding:17px 18px 18px 22px;display:flex;flex-direction:column;gap:9px; }
+
+  /* Cada línea entra desde el fondo con un pequeño escalonado. */
+  .capa {
+    opacity:0;transform:scale(.86) translateY(5px);filter:blur(8px);
+    transition:opacity .45s var(--ease), transform .65s var(--spring), filter .45s var(--ease);
+    transition-delay:calc(var(--i) * 50ms + 300ms);
+  }
+  .contenido.dentro .capa { opacity:1;transform:none;filter:none; }
+  .contenido.saliendo .capa {
+    opacity:0;transform:scale(.86);filter:blur(8px);
+    transition-duration:.24s;transition-timing-function:cubic-bezier(.4,0,1,1);
+    transition-delay:calc((4 - var(--i)) * 22ms);
+  }
+
+  .cabeza { display:flex;align-items:center;gap:8px;-webkit-app-region:drag; }
+  .ceja { flex:1;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3); }
+  .cerrar {
+    width:26px;height:26px;border-radius:50%;border:none;flex-shrink:0;display:grid;place-items:center;cursor:pointer;
+    background:color-mix(in srgb, var(--text) 10%, transparent);color:var(--text2);-webkit-app-region:no-drag;
+    transition:background-color .2s, color .2s, transform .3s var(--spring);
+  }
+  .cerrar:hover { background:color-mix(in srgb, var(--text) 18%, transparent);color:var(--text);transform:rotate(90deg); }
+
+  .tarea { display:flex;align-items:center;gap:10px;min-width:0; }
+  .punto { width:10px;height:10px;border-radius:50%;flex-shrink:0;background:var(--accent2);animation:latidoPunto 2.4s ease-in-out infinite; }
+  @keyframes latidoPunto { 50% { transform:scale(1.2); } }
+  .nombre { flex:1;min-width:0;font-size:16px;font-weight:650;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .memo { font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:-4px 0 0 20px; }
+
+  .tiempos { display:flex;align-items:center;gap:10px; }
+  .grande { font-size:30px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.05;white-space:nowrap; }
+  .hoy {
+    margin-left:auto;font-size:12.5px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;
+    background:color-mix(in srgb, var(--text) 9%, transparent);padding:4px 10px;border-radius:999px;white-space:nowrap;
+  }
+
+  .acciones { display:flex;gap:8px;margin-top:2px; }
+  .accion {
+    flex:1;display:flex;align-items:center;justify-content:center;gap:7px;height:36px;border:none;border-radius:999px;
+    font-family:inherit;font-size:13px;font-weight:650;cursor:pointer;-webkit-app-region:no-drag;
+    transition:background-color .2s, transform .3s var(--spring);
+  }
+  .accion:hover { transform:scale(1.03); }
+  .accion.pausa { background:color-mix(in srgb, var(--text) 12%, transparent);color:var(--text); }
+  .accion.pausa:hover { background:color-mix(in srgb, var(--text) 19%, transparent); }
+  .accion.cambiar { background:var(--accent-soft-2);color:var(--accent); }
+  .accion.cambiar:hover { background:color-mix(in srgb, var(--accent2) 40%, transparent); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .capa, .contenido.saliendo .capa { transition-duration:.01s;transition-delay:0s; }
+    .tarjeta.sin-cristal.brota, .tarjeta.sin-cristal.sume { animation-duration:.01s; }
+  }
+</style>
 </head>
 <body>
-<div class="card animate-in">
-
-  <div class="win-controls">
-    <button class="win-btn close" onclick="dismiss()" title="Cerrar">
-      <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-    </button>
-  </div>
-
-  <div class="header" style="-webkit-app-region:drag">
-    <span class="label">imputa.me · recordatorio</span>
-  </div>
-
-  <div class="task-row">
-    <div class="pulse-dot" id="dot"></div>
-    <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:3px">
-      <div style="display:flex;align-items:center;gap:8px;min-width:0">
-        <span class="task-label" id="taskName">—</span>
-        <span class="task-badge ongoing" id="taskBadge" style="display:none">En curso</span>
-      </div>
-      <div class="widget-memo" id="taskMemo" style="display:none"></div>
+<div class="tarjeta" id="tarjeta">
+  <div class="contenido" id="contenido">
+    <div class="cabeza capa" style="--i:0">
+      <span class="ceja" id="ceja">En marcha</span>
+      <button class="cerrar" onclick="dismiss()" title="Cerrar">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
     </div>
-  </div>
-
-  <div class="time-row">
-    <span class="time-big" id="taskTime">0m 00s</span>
-    <span class="time-total" id="totalTime">Hoy: 0m</span>
-  </div>
-
-  <div class="actions">
-    <button class="btn-w btn-pause-w" onclick="pause()">
-      <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><rect x="1.5" y="1" width="3" height="9" rx="1"/><rect x="6.5" y="1" width="3" height="9" rx="1"/></svg>
-      Pausar
-    </button>
-    <button class="btn-w btn-switch-w" onclick="openMain()">
-      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 5.5h7M6.5 3l2.5 2.5L6.5 8"/><path d="M4.5 3L2 5.5 4.5 8"/></svg>
-      Cambiar
-    </button>
+    <div class="tarea capa" style="--i:1">
+      <span class="punto" id="dot"></span>
+      <span class="nombre" id="taskName">—</span>
+    </div>
+    <div class="memo capa" id="taskMemo" style="--i:1;display:none"></div>
+    <div class="tiempos capa" style="--i:2">
+      <span class="grande" id="taskTime">0m 00s</span>
+      <span class="hoy" id="totalTime">Hoy 0m</span>
+    </div>
+    <div class="acciones capa" style="--i:3">
+      <button class="accion pausa" onclick="pause()">
+        <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><rect x="1.5" y="1" width="3" height="9" rx="1"/><rect x="6.5" y="1" width="3" height="9" rx="1"/></svg>
+        Pausar
+      </button>
+      <button class="accion cambiar" onclick="openMain()">
+        <svg width="12" height="12" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 5.5h7M6.5 3l2.5 2.5L6.5 8"/><path d="M4.5 3L2 5.5 4.5 8"/></svg>
+        Cambiar
+      </button>
+    </div>
   </div>
 </div>
 
+<script src="shared.js"></script>
+<script src="glass.js"></script>
 <script>
 const { ipcRenderer } = require('electron');
+const tarjeta = document.getElementById('tarjeta');
+const contenido = document.getElementById('contenido');
+// Tamaño elegido en Ajustes (k=1 → 330 px de ancho). El contenido se dibuja a su tamaño de
+// siempre y se escala; la tarjeta (y su cristal) toma la medida ya escalada.
+let ESCALA = Math.max(0.8, Math.min(1.5, Number(new URLSearchParams(location.search).get('k')) || 1));
+contenido.style.width = '330px';
+contenido.style.transformOrigin = '0 0';
+function medirTarjeta() { tarjeta.style.height = (contenido.offsetHeight * ESCALA) + 'px'; }
+function aplicarEscala(k) {
+  ESCALA = Math.max(0.8, Math.min(1.5, Number(k) || 1));
+  contenido.style.transform = `scale(${ESCALA})`;
+  tarjeta.style.width = (330 * ESCALA) + 'px';
+  tarjeta.style.borderRadius = (34 * ESCALA) + 'px';
+  medirTarjeta();
+  if (vidrio) { vidrio.opts.radius = 34 * ESCALA / 0.44; vidrio.reflow(); }
+}
+if (typeof ResizeObserver === 'function') new ResizeObserver(medirTarjeta).observe(contenido);
+// Ajustes mueve el deslizador de tamaño: se ve al momento.
+ipcRenderer.on('widget-escala', (_, k) => aplicarEscala(k));
 let currentState = null;
 
 function fmt(secs) {
+  secs = Math.floor(secs || 0);
   const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60;
   if(h>0) return `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
   return `${m}m ${String(s).padStart(2,'0')}s`;
 }
+// "Hoy" sin segundos: al lado del contador grande, el detalle sobra.
+function fmtCorto(secs) {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+}
 
-ipcRenderer.on('state', (_, state) => { currentState = state; render(state); });
+ipcRenderer.on('state', (_, state) => { currentState = state; render(state); listo(); });
 ipcRenderer.send('action', { type: 'get-state' });
 
 function render(state) {
   const active = state.tasks.find(t => t.id === state.activeTaskId);
   if (active) {
-    document.getElementById('dot').style.background = active.color || '#34d399';
+    document.getElementById('dot').style.background = active.color || 'var(--accent2)';
     document.getElementById('taskName').textContent = active.name;
     document.getElementById('taskTime').textContent = fmt(active.todaySecs);
-    const oneshot = active.taskType === 'oneShot';
-    const badge = document.getElementById('taskBadge');
-    if (badge) {
-      badge.style.display = '';
-      badge.className = 'task-badge ' + (oneshot ? 'oneshot' : 'ongoing');
-      badge.textContent = oneshot ? 'Puntual' : 'Recurrente';
-    }
+    document.getElementById('ceja').textContent = 'En marcha · ' + (active.taskType === 'oneShot' ? 'Puntual' : 'Recurrente');
     const memo = (active.memo || '').trim();
     const memoEl = document.getElementById('taskMemo');
-    if (memoEl) {
-      if (memo) {
-        memoEl.style.display = '';
-        memoEl.textContent = memo.length > 80 ? memo.slice(0, 80) + '…' : memo;
-        memoEl.title = memo;
-      } else {
-        memoEl.style.display = 'none';
-        memoEl.textContent = '';
-      }
-    }
+    memoEl.style.display = memo ? '' : 'none';
+    memoEl.textContent = memo.length > 80 ? memo.slice(0, 80) + '…' : memo;
+    memoEl.title = memo;
   }
-  document.getElementById('totalTime').textContent = `Hoy: ${fmt(state.todayTotal)}`;
+  document.getElementById('totalTime').textContent = `Hoy ${fmtCorto(state.todayTotal)}`;
 }
 
 // Sin ticker propio: el proceso principal manda el estado cada segundo mientras hay
 // una tarea en marcha, que es justo cuando existe el recordatorio.
+
+// ── Entrar y salir ──────────────────────────────────────────────────────────────
+// El borde de la pantalla más cercano a la tarjeta (en px de la tarjeta, un poco por fuera):
+// por ahí asoma al entrar y por ahí se mete al irse.
+function puntoDelBorde() {
+  const r = tarjeta.getBoundingClientRect();
+  const L = screen.availLeft || 0, T = screen.availTop || 0;
+  const R = L + screen.availWidth, B = T + screen.availHeight;
+  const izq = window.screenX + r.left, arr = window.screenY + r.top;
+  const hueco = { right: R - (izq + r.width), left: izq - L, bottom: B - (arr + r.height), top: arr - T };
+  const lado = ['right', 'left', 'bottom', 'top'].reduce((a, b) => (hueco[b] < hueco[a] ? b : a));
+  const fuera = 28;
+  if (lado === 'right') return { x: R - izq + fuera, y: r.height / 2 };
+  if (lado === 'left') return { x: L - izq - fuera, y: r.height / 2 };
+  if (lado === 'bottom') return { x: r.width / 2, y: B - arr + fuera };
+  return { x: r.width / 2, y: T - arr - fuera };
+}
+// Para la versión CSS: cuánto hay que mover la tarjeta para llevar su centro a ese punto.
+function ponerDesplazamiento(p) {
+  const r = tarjeta.getBoundingClientRect();
+  tarjeta.style.setProperty('--dx', (p.x - r.width / 2) + 'px');
+  tarjeta.style.setProperty('--dy', (p.y - r.height / 2) + 'px');
+}
+
+let vidrio = null;
+aplicarEscala(ESCALA);   // ya con vidrio declarado
+let fuenteVivo = null;   // lo de detrás del cristal en directo (captura nativa o vídeo); se para al irse
+let estado = 'esperando';   // esperando → entrando → dentro → saliendo
+let temaListo = false, datosListos = false;
+window.addEventListener('theme-change', () => { temaListo = true; listo(); });
+// Si algo tarda (el tema o el primer estado), no se queda sin salir.
+setTimeout(() => { temaListo = datosListos = true; listo(); }, 500);
+
+function listo() {
+  if (currentState) datosListos = true;
+  if (estado !== 'esperando' || !temaListo || !datosListos) return;
+  estado = 'entrando';
+  entrar();
+}
+
+async function entrar() {
+  const desde = puntoDelBorde();
+  let g = null;
+  if (window.LiquidGlass && LiquidGlass.supported() && document.documentElement.dataset.glass !== 'off') {
+    // Lo de detrás al instante, leído de la GPU (captura nativa); si no se puede, el vídeo de la
+    // pantalla; y si tampoco, una foto fija.
+    const nat = await LiquidGlass.pantallaNativa(() => ({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }));
+    const video = nat ? null : await LiquidGlass.pantallaEnVivo(60);
+    fuenteVivo = nat || video;
+    g = await LiquidGlass.attach(tarjeta, {
+      nativo: nat, vivo: video,
+      foto: fuenteVivo ? null : ipcRenderer.invoke('capture-desktop', { propia: true }).catch(() => null),
+      margen: 44, radius: 34 * ESCALA / 0.44,
+      desenfoque: 14,   // más nítido que el de serie (30): se distingue lo de detrás
+    });
+  }
+  if (estado !== 'entrando') { if (g) g.detach(); if (fuenteVivo) { fuenteVivo.parar(); fuenteVivo = null; } return; }   // se fue antes de llegar
+  tarjeta.classList.add('visible');
+  if (g) {
+    vidrio = g;
+    g.brotar(780, desde);
+  } else {
+    tarjeta.classList.add('sin-cristal');
+    ponerDesplazamiento(desde);
+    tarjeta.classList.add('brota');
+  }
+  requestAnimationFrame(() => contenido.classList.add('dentro'));
+  estado = 'dentro';
+}
+
+async function salir() {
+  if (estado === 'saliendo') return;
+  const yaFuera = estado !== 'dentro';
+  estado = 'saliendo';
+  if (yaFuera) return;   // ni había llegado a verse
+  contenido.classList.remove('dentro');
+  contenido.classList.add('saliendo');
+  const hacia = puntoDelBorde();
+  await new Promise(r => setTimeout(r, 120));   // primero se van las letras
+  if (vidrio) { await vidrio.sumir(540, hacia); vidrio.detach(); vidrio = null; tarjeta.classList.remove('visible'); }
+  else { ponerDesplazamiento(hacia); tarjeta.classList.remove('brota'); tarjeta.classList.add('sume'); }
+  if (fuenteVivo) { fuenteVivo.parar(); fuenteVivo = null; }
+}
+ipcRenderer.on('widget-salir', salir);
+
+// La ventana es más grande que la tarjeta (por la sombra y la gota): fuera de la tarjeta,
+// los clics pasan a lo que haya debajo.
+let ratonDentro = false;
+document.addEventListener('mousemove', (e) => {
+  const dentro = !!(e.target && e.target.closest && e.target.closest('.tarjeta.visible'));
+  if (dentro === ratonDentro) return;
+  ratonDentro = dentro;
+  ipcRenderer.send('action', { type: 'widget-raton', payload: { dentro } });
+});
+document.addEventListener('mouseleave', () => {
+  if (!ratonDentro) return;
+  ratonDentro = false;
+  ipcRenderer.send('action', { type: 'widget-raton', payload: { dentro: false } });
+});
 
 function pause() { ipcRenderer.send('action', { type:'pause' }); dismiss(); }
 function openMain() { ipcRenderer.send('action', { type:'open-main' }); dismiss(); }

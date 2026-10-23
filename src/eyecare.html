@@ -8,11 +8,10 @@
   @font-face{font-family:'Montserrat';font-style:normal;font-weight:600;font-display:swap;src:url('../assets/fonts/montserrat-latin-600-normal.woff2') format('woff2');}
   @font-face{font-family:'Montserrat';font-style:normal;font-weight:700;font-display:swap;src:url('../assets/fonts/montserrat-latin-700-normal.woff2') format('woff2');}
 
-  /* Todo se mide en --u, una unidad que fija el JS a partir del ancho real de la
-     ventana. Ni porcentajes en cadena, ni aspect-ratio, ni container queries: la
-     primera versión apilaba las tres. Los ojos iban con flex:1 + aspect-ratio dentro
-     de un contenedor sin altura, así que el stretch del flex ganaba a la proporción,
-     los dejaba a cero de alto y todo el conjunto se aplanaba en una línea. */
+  /* Todo se mide en --u, una unidad que fija el JS a partir del ancho real de la ventana
+     (100 px de ancho = 1 px de --u), así el dibujo escala entero con el tamaño de Ajustes.
+     2.8.3: los ojos son los de la pantallita de Ajustes (óvalos blancos que parpadean y
+     miran a un lado y a otro) y el fondo es cristal líquido de lo que hay detrás. */
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
@@ -22,112 +21,118 @@
   }
   .burbuja {
     --u: 1.5px;
-    --acento: #a5b4fc;
-    /* Sin sombra: en una ventana transparente se recorta contra el borde y deja un
-       rectángulo oscuro alrededor del redondeo. Un cuadrado limpio se ve mejor. */
+    --acento: #ffb383;
     position: fixed; inset: 0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: calc(var(--u) * 5);
-    background: rgba(15, 15, 24, .9);
-    border: 1px solid rgba(255, 255, 255, .14);
-    border-radius: calc(var(--u) * 22);
+    border-radius: calc(var(--u) * 26);
+    visibility: hidden;
+  }
+  .burbuja.visible { visibility: visible; }
+  /* El lienzo del cristal (en las demás ventanas lo pone mac.css). */
+  .burbuja { isolation: isolate; }
+  .lg-canvas { position: absolute; z-index: -1; pointer-events: none; }
+  /* Sin cristal (apagado o sin WebGL): un fondo oscuro casi opaco, como antes. */
+  .burbuja.sin-cristal {
+    background: rgba(18, 15, 18, .9);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14);
     animation: entrar .5s cubic-bezier(.2, 1.25, .4, 1);
-    transition: opacity .3s ease, transform .3s ease;
   }
-  body.saliendo .burbuja { opacity: 0; transform: scale(.92); }
-  @keyframes entrar {
-    from { opacity: 0; transform: scale(.8) translateY(calc(var(--u) * -8)); }
-    to   { opacity: 1; transform: none; }
-  }
+  body.saliendo .burbuja.sin-cristal { opacity: 0; transform: scale(.92); transition: opacity .25s ease, transform .25s ease; }
+  @keyframes entrar { from { opacity: 0; transform: scale(.8); } to { opacity: 1; transform: none; } }
 
-  /* ── Los ojos ───────────────────────────────────────────────────────────
-     Dos óvalos con su pupila. Parpadean y miran despacio de un lado a otro:
-     el movimiento ES la instrucción, apartar la vista de la pantalla. */
-  .ojos { display: flex; gap: calc(var(--u) * 7); flex-shrink: 0; }
-  .ojo {
-    position: relative; flex-shrink: 0;
-    width: calc(var(--u) * 26); height: calc(var(--u) * 19);
-    background: #f6f6fb;
-    border-radius: 50%;
-    box-shadow: inset 0 calc(var(--u) * 1.5) calc(var(--u) * 3) rgba(0, 0, 0, .18);
-    animation: parpadeo 6s ease-in-out infinite;
+  /* El contenido entra desde el fondo (de borroso y pequeño a nítido) y se va al revés. */
+  .capa { opacity: 0; transform: scale(.82); filter: blur(calc(var(--u) * 4));
+          transition: opacity .4s ease, transform .55s cubic-bezier(.34, 1.45, .5, 1), filter .4s ease; }
+  .burbuja.visible .capa { opacity: 1; transform: none; filter: none; transition-delay: .12s; }
+  body.saliendo .capa { opacity: 0; transform: scale(.82); filter: blur(calc(var(--u) * 4)); transition-duration: .2s; transition-delay: 0s; }
+
+  .ojos { display: flex; gap: calc(var(--u) * 6); flex-shrink: 0; }
+  .ojos i {
+    width: calc(var(--u) * 28); height: calc(var(--u) * 18);
+    border-radius: 50% / 58%; background: #fff; position: relative; overflow: hidden;
+    box-shadow: 0 calc(var(--u) * 1.5) calc(var(--u) * 4) rgba(0, 0, 0, .35);
+    animation: parpadeo 4.2s infinite;
   }
-  .ojo:nth-child(2) { animation-delay: .06s; }   /* parpadear a la vez clavada parece un robot */
-  .pupila {
-    position: absolute; top: 50%; left: 50%;
-    width: calc(var(--u) * 10); height: calc(var(--u) * 10);
-    margin: calc(var(--u) * -5) 0 0 calc(var(--u) * -5);
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #4b4b66 0%, #16161f 65%);
-    animation: mirar 6s ease-in-out infinite;
+  .ojos i::after {
+    content: ''; position: absolute; top: 50%; left: 50%; width: 46%; aspect-ratio: 1; border-radius: 50%;
+    background: #1d1d1f; transform: translate(-50%, -50%); animation: mirar 4.2s ease-in-out infinite;
   }
-  .brillo {
-    position: absolute; top: calc(var(--u) * 1.6); right: calc(var(--u) * 1.8);
-    width: calc(var(--u) * 3); height: calc(var(--u) * 3);
-    border-radius: 50%; background: rgba(255, 255, 255, .9);
-  }
-  @keyframes parpadeo {
-    0%, 44%, 52%, 100% { transform: scaleY(1); }
-    48%                { transform: scaleY(.08); }
-  }
-  /* Mira a la izquierda, vuelve, mira a la derecha, vuelve. Despacio, sin tirones. */
-  @keyframes mirar {
-    0%,  12%   { transform: translate(0, 0); }
-    25%, 37%   { transform: translate(calc(var(--u) * -6), 0); }
-    50%, 57%   { transform: translate(0, 0); }
-    70%, 82%   { transform: translate(calc(var(--u) * 6), 0); }
-    95%, 100%  { transform: translate(0, 0); }
-  }
+  @keyframes parpadeo { 0%, 46%, 54%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.08); } }
+  @keyframes mirar { 0%, 20% { transform: translate(-50%, -50%); } 30%, 60% { transform: translate(-95%, -50%); } 70%, 100% { transform: translate(-5%, -50%); } }
 
   .cuenta {
-    font-size: calc(var(--u) * 26);
-    line-height: 1; font-weight: 800; color: var(--acento);
-    font-variant-numeric: tabular-nums; flex-shrink: 0;
-    text-shadow: 0 calc(var(--u) * 1.5) calc(var(--u) * 7) rgba(0, 0, 0, .5);
+    font-size: calc(var(--u) * 24); line-height: 1; font-weight: 700; color: #fffaf6;
+    font-variant-numeric: tabular-nums; flex-shrink: 0; letter-spacing: -.02em;
   }
-  .texto {
-    font-size: calc(var(--u) * 8);
-    line-height: 1.25; font-weight: 600; text-align: center; flex-shrink: 0;
-    color: rgba(255, 255, 255, .6);
-    padding: 0 calc(var(--u) * 6);
-  }
+  /* 2.8.3: «Solo los ojos» (Ajustes): sin fondo ni número, los ojos flotando con su sombra. */
+  .burbuja.solo-ojos .cuenta { display: none; }
+  .burbuja.solo-ojos .ojos i { box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0, 0, 0, .45), 0 0 0 calc(var(--u) * .6) rgba(0, 0, 0, .12); }
+  .burbuja.solo-ojos .ojos i { width: calc(var(--u) * 38); height: calc(var(--u) * 25); }
+  .cuenta { text-shadow: 0 calc(var(--u) * 1) calc(var(--u) * 4) rgba(0, 0, 0, .35); }
+  :root[data-scheme="light"] .cuenta { color: #1d1d1f; text-shadow: none; }
+  :root[data-scheme="light"] .burbuja.sin-cristal { background: rgba(255, 255, 255, .92); }
 </style>
 </head>
 <body>
   <div class="burbuja" id="burbuja">
-    <div class="ojos">
-      <div class="ojo"><div class="pupila"><div class="brillo"></div></div></div>
-      <div class="ojo"><div class="pupila"><div class="brillo"></div></div></div>
-    </div>
-    <div class="cuenta" id="cuenta">20</div>
-    <div class="texto">Mira a lo lejos</div>
+    <div class="ojos capa"><i></i><i></i></div>
+    <div class="cuenta capa" id="cuenta">20</div>
   </div>
 
+<script src="shared.js"></script>
+<script src="glass.js"></script>
 <script>
 const { ipcRenderer } = require('electron');
+const burbuja = document.getElementById('burbuja');
 
-// La unidad base sale del ancho real de la ventana: 100px de ancho = --u de 1px, y
-// todo lo demás va en múltiplos. Así el dibujo escala entero con el deslizador de
-// tamaño de Ajustes sin depender de porcentajes que se puedan aplanar.
 function ajustarEscala() {
-  document.getElementById('burbuja').style.setProperty('--u', (window.innerWidth / 100) + 'px');
+  burbuja.style.setProperty('--u', (window.innerWidth / 100) + 'px');
 }
 window.addEventListener('resize', ajustarEscala);
 ajustarEscala();
 
-ipcRenderer.on('theme', (_, t) => {
-  if (t && t.accent) document.getElementById('burbuja').style.setProperty('--acento', t.accent);
-});
-ipcRenderer.send('action', { type: 'get-theme' });
-
 let tic = null;
+let vidrio = null;
+let enVivo = null;   // la pantalla en directo detrás del cristal (se para al irse)
+let turno = 0;
 
-ipcRenderer.on('eye-start', (_, segundos) => {
+// El cristal: una foto de lo que hay detrás de la ventana (que no sale en ella) y la forma
+// de la burbuja encima, entrando con su muelle.
+async function ponerCristal(mio) {
+  if (vidrio) { vidrio.detach(); vidrio = null; }
+  burbuja.classList.remove('sin-cristal');
+  let g = null;
+  if (soloOjos) { burbuja.classList.add('visible'); return; }   // sin fondo: nada que pintar detrás
+  if (window.LiquidGlass && LiquidGlass.supported() && document.documentElement.dataset.glass !== 'off') {
+    // Lo de detrás al instante (captura nativa de la GPU); si no, el vídeo de la pantalla.
+    if (!enVivo) enVivo = await LiquidGlass.pantallaNativa(() => ({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }));
+    if (!enVivo) enVivo = await LiquidGlass.pantallaEnVivo(60);
+    g = await LiquidGlass.attach(burbuja, {
+      nativo: enVivo && enVivo.captura ? enVivo : null, vivo: enVivo && enVivo.video ? enVivo : null,
+      foto: enVivo ? null : ipcRenderer.invoke('capture-desktop', { propia: true }).catch(() => null),
+      margen: 0, sombra: false, dpr: 1, sinMarca: true, tinte: 0.18,   // muy translúcido
+      radius: (parseFloat(getComputedStyle(burbuja).borderTopLeftRadius) || 39) / 0.44,
+    });
+  }
+  if (mio !== turno) { if (g) g.detach(); return; }
+  if (g) { vidrio = g; g.entrar(460); }
+  else burbuja.classList.add('sin-cristal');
+  burbuja.classList.add('visible');
+}
+
+let soloOjos = false;
+ipcRenderer.on('eye-start', (_, segundos, opciones) => {
+  const mio = ++turno;
+  soloOjos = !!(opciones && opciones.soloOjos);
+  burbuja.classList.toggle('solo-ojos', soloOjos);
   let restantes = Math.max(1, Number(segundos) || 20);
   ajustarEscala();
   document.body.classList.remove('saliendo');
+  burbuja.classList.remove('visible');
   document.getElementById('cuenta').textContent = restantes;
+  ponerCristal(mio);
   if (tic) clearInterval(tic);
   tic = setInterval(() => {
     restantes--;
@@ -138,9 +143,16 @@ ipcRenderer.on('eye-start', (_, segundos) => {
 
 // Un clic la quita de en medio hasta el siguiente aviso: si estás en mitad de algo,
 // que no haya que aguantarla los 20 segundos enteros.
-function cerrar() {
+async function cerrar() {
+  const mio = ++turno;
   document.body.classList.add('saliendo');
-  setTimeout(() => ipcRenderer.send('action', { type: 'eye-done' }), 300);
+  if (vidrio) await vidrio.salir(240);
+  else await new Promise(r => setTimeout(r, 260));
+  if (mio !== turno) return;
+  if (vidrio) { vidrio.detach(); vidrio = null; }
+  if (enVivo) { enVivo.parar(); enVivo = null; }
+  burbuja.classList.remove('visible');
+  ipcRenderer.send('action', { type: 'eye-done' });
 }
 document.body.addEventListener('click', () => {
   if (tic) { clearInterval(tic); tic = null; }

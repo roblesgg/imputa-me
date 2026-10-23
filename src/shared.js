@@ -43,6 +43,8 @@ function applyThemeVars(t) {
   document.documentElement.dataset.theme = t.key || '';
   document.documentElement.dataset.scheme = t.scheme || 'dark';
   document.documentElement.dataset.glass = t.liquidGlass === false ? 'off' : 'on';
+  window.__opacidadFondo = t.opacidadFondo == null ? 1 : Number(t.opacidadFondo);
+  window.__difuminar = t.difuminar !== false;
   window.__theme = t;   // quien escuche 'theme-change' lo lee de aquí
   if (typeof Event === 'function') window.dispatchEvent(new Event('theme-change'));
 }
@@ -196,7 +198,9 @@ const TUTORIAL_STEPS = [
     title:'Colores por sección', text:'Al pasar por la cabecera de una sección sale el botón de paleta: elige unos tonos (azules, verdes, naranjas…) y cada tarea nueva de esa sección cogerá uno al azar. Con "Repintar" se los das también a las que ya tiene.' },
 
   { id:'set-tema-28',    window:'settings', version:'2.8.0', selector:'#themeGrid',
-    title:'Noche cálida y Luz', text:'Los dos temas del rediseño van primero: Noche cálida, el oscuro, que es el de por defecto, y Luz, el claro; los de antes siguen en la lista. Y justo debajo eliges el color de los botones por separado del fondo.' },
+    title:'Temas con brillo', text:'Los del rediseño van primero (Noche cálida es el de por defecto); los de antes siguen en Clásicos. Y justo debajo eliges el color de los botones por separado del fondo.' },
+  { id:'set-mini-283',   window:'settings', version:'2.8.3', selector:'#mini',
+    title:'Tu app, en pequeño', text:'Toca un tema, un acento o la transparencia y lo ves aquí al momento, antes de mirar la app de verdad.' },
   { id:'set-cristal-28', window:'settings', version:'2.8.0', selector:'.row:has(#liquidGlass)',
     title:'Cristal líquido', text:'Los bocadillos y el menú circular doblan lo que hay detrás, como un cristal. Si lo prefieres esmerilado, se apaga aquí.' },
   { id:'set-dock',       window:'settings', version:'2.2.2', selector:'.row:has(#dockMode)',
@@ -231,8 +235,11 @@ function tutIsVisible(el) {
 
 // Arranca el tutorial de esta ventana si hay pasos pendientes (no vistos/saltados)
 // cuyo elemento esté visible ahora mismo. Devuelve true si lo ha arrancado.
+// Lo que esta página ya ha dado por visto (u omitido). Ajustes solo recibe la lista de
+// vistos al cargar: sin esto, al volver a desplegar el panel el tutorial salía otra vez.
+const tutVistosAqui = new Set();
 function startTutorialIfNeeded(windowName, seenIds, onDone) {
-  const seen = new Set(seenIds || []);
+  const seen = new Set([...(seenIds || []), ...tutVistosAqui]);
   const pending = TUTORIAL_STEPS.filter(s =>
     s.window === windowName && !seen.has(s.id) && tutIsVisible(document.querySelector(s.selector)));
   if (!pending.length) {
@@ -261,6 +268,7 @@ function runTutorial(steps, onDone, windowName) {
   document.body.appendChild(card);
 
   function markSeen(ids) {
+    ids.forEach(id => tutVistosAqui.add(id));
     if (ids.length) ipc.send('action', { type: 'mark-tutorial-seen', payload: { ids } });
   }
 
@@ -350,6 +358,36 @@ function runTutorial(steps, onDone, windowName) {
   window.addEventListener('resize', reposition);
   reposition();
 }
+
+// ── Bordes de los scrolls (2.8.3) ────────────────────────────────────────────
+// El contenido ya no se corta en seco contra una línea invisible al llegar al borde de
+// una lista: se desvanece en los últimos píxeles, y solo por el lado por el que queda más
+// (arriba si has bajado, abajo si queda por ver). Lo pinta mac.css (.desvanece).
+(function () {
+  const SELECTORES = '#gridScroll, .sidebar, .groups-list, .tasks-list, .pop-body, .task-picker, .emp-lista, .rm-lista-cuerpo, .app';
+  function marcar(el) {
+    if (!el.classList.contains('desvanece')) el.classList.add('desvanece');
+    // En las páginas enteras (.app) abajo va la barra fija de botones: ahí solo por arriba.
+    const soloArriba = el.classList.contains('app');
+    el.classList.toggle('hay-arriba', el.scrollTop > 2);
+    el.classList.toggle('hay-abajo', !soloArriba && el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  }
+  function repasar() {
+    document.querySelectorAll(SELECTORES).forEach((el) => {
+      if (el.scrollHeight > el.clientHeight + 2 || el.classList.contains('desvanece')) marcar(el);
+    });
+  }
+  // El scroll no sube por el documento, pero sí se puede escuchar al vuelo (captura).
+  document.addEventListener('scroll', (e) => {
+    const el = e.target;
+    if (el && el.classList && el.classList.contains('desvanece')) marcar(el);
+    else if (el && el.matches && el.matches(SELECTORES)) marcar(el);
+  }, true);
+  window.addEventListener('resize', repasar);
+  // Las listas cambian de largo al llegar datos o abrir secciones: se repasa de vez en cuando.
+  setInterval(repasar, 900);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', repasar); else repasar();
+})();
 
 // ── Arrastre de la ventana desde el asa (.win-drag) ──────────────────────────
 // Se hace por JavaScript en vez de con -webkit-app-region: drag porque en la ventana
@@ -596,4 +634,84 @@ function pickImputeUrl(urls) {
   if (document.body) marcarAncho();
   else document.addEventListener('DOMContentLoaded', marcarAncho);
   window.addEventListener('resize', marcarAncho);
+})();
+
+// ── Forma de la ventana pegada a un elemento (2.8.3) ────────────────────────────────
+// Las ventanas transparentes con desenfoque de Windows detrás (recordatorio, ojos) solo se ven
+// por su "forma": lo de fuera deja pasar los clics y no lleva desenfoque. Mientras el elemento
+// se anima, la forma lo sigue en cada fotograma. radio: el de sus esquinas, ya escalado.
+function formaDeElemento(el) {
+  const r = el.getBoundingClientRect();
+  const escala = el.offsetWidth ? r.width / el.offsetWidth : 1;
+  const cs = getComputedStyle(el).borderTopLeftRadius || '0';
+  const base = parseFloat(cs) || 0;
+  const radio = (cs.trim().endsWith('%') ? base / 100 * Math.min(el.offsetWidth, el.offsetHeight) : base) * escala;
+  const x0 = Math.max(0, r.left), y0 = Math.max(0, r.top);
+  const x1 = Math.min(window.innerWidth, r.right), y1 = Math.min(window.innerHeight, r.bottom);
+  return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0), radios: [radio, radio, radio, radio] };
+}
+function seguidorDeForma(el) {
+  let ipc = null;
+  try { ipc = require('electron').ipcRenderer; } catch { return { enviar() {}, seguir() {} }; }
+  let hasta = 0, raf = 0, oculto = false;
+  const enviar = () => ipc.send('action', { type: 'forma-ventana',
+    payload: oculto ? { x: 0, y: 0, w: 0, h: 0 } : formaDeElemento(el) });
+  return {
+    enviar,
+    seguir(ms) {
+      hasta = Math.max(hasta, performance.now() + ms);
+      if (raf) return;
+      const paso = () => { enviar(); raf = performance.now() < hasta ? requestAnimationFrame(paso) : 0; };
+      raf = requestAnimationFrame(paso);
+    },
+    ocultar(v) { oculto = !!v; enviar(); },
+  };
+}
+
+// ── Avisos de confirmar (2.8.3) ──────────────────────────────────────────────────
+// Con uno abierto, Intro acepta y Esc cancela, y manda sobre cualquier otro atajo (antes
+// Intro abría los detalles del rato seleccionado que había detrás).
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== 'Escape') return;
+  const pop = document.getElementById('confirmPopup');
+  if (!pop || getComputedStyle(pop).display === 'none') return;
+  const btn = document.getElementById(e.key === 'Enter' ? 'confirmPopupOkBtn' : 'confirmPopupCancelBtn');
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (btn && btn.style.display !== 'none') btn.click();
+  else if (e.key === 'Escape') {   // aviso de un solo botón: Esc lo cierra igual
+    pop.style.display = 'none';
+    const fondo = document.getElementById('confirmPopupBackdrop');
+    if (fondo) fondo.style.display = 'none';
+  }
+}, true);
+
+// ── Deshacer / rehacer (2.8.3) ───────────────────────────────────────────────────
+// Ctrl+Z deshace el último cambio en tareas, entradas o secciones; Ctrl+Y (o Ctrl+Mayús+Z)
+// lo rehace. Lo guarda el proceso principal; aquí solo el atajo y el aviso.
+(function () {
+  let ipc = null;
+  try { ipc = require('electron').ipcRenderer; } catch { return; }
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const t = e.target, tag = (t && t.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    const k = (e.key || '').toLowerCase();
+    const tipo = (k === 'z' && !e.shiftKey) ? 'undo' : ((k === 'y' || (k === 'z' && e.shiftKey)) ? 'redo' : null);
+    if (!tipo) return;
+    e.preventDefault();
+    ipc.send('action', { type: tipo });
+  });
+  ipc.on('undo-hecho', (_, r) => {
+    const texto = r.ok ? (r.tipo === 'undo' ? 'Deshecho' : 'Rehecho') : (r.tipo === 'undo' ? 'Nada que deshacer' : 'Nada que rehacer');
+    let el = document.getElementById('undoToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'undoToast';
+      el.className = 'cal-toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = texto;
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+    clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 1600);
+  });
 })();

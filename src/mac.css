@@ -912,3 +912,156 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent2); }
 .pal-row.sel .pal-check { opacity: 1; transform: none; }
 #palRepintar:disabled { opacity: .4; cursor: default; }
 .pal-backdrop { background: transparent !important; animation: none !important; }
+
+/* ═══ 2.8.3 ═══════════════════════════════════════════════════════════════════ */
+
+/* Bordes de los scrolls: el contenido se desvanece en los últimos píxeles en vez de
+   cortarse contra una línea invisible; solo por el lado por el que queda más (shared.js
+   pone .hay-arriba / .hay-abajo). Las variables se animan para que el borde aparezca suave. */
+@property --fade-arriba { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --fade-abajo { syntax: '<length>'; inherits: false; initial-value: 0px; }
+.desvanece {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-arriba), #000 calc(100% - var(--fade-abajo)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-arriba), #000 calc(100% - var(--fade-abajo)), transparent 100%);
+  transition: --fade-arriba .3s var(--ease), --fade-abajo .3s var(--ease);
+}
+.desvanece.hay-arriba { --fade-arriba: 28px; }
+.desvanece.hay-abajo { --fade-abajo: 28px; }
+#gridScroll.desvanece.hay-arriba { --fade-arriba: 36px; }
+/* El selector de tareas lleva las cabeceras de sección pegadas arriba: ahí solo por abajo. */
+.task-picker.desvanece.hay-arriba { --fade-arriba: 0px; }
+
+/* Cristal de los bocadillos y del menú circular: letras más claras (el tinte es oscuro). */
+:root:not([data-scheme="light"]) :is(.lg-on, .lg-cerrando, .rm, .entry-popup.pop) {
+  --text: #fffaf6;
+  --text2: rgba(250, 244, 238, .84);
+  --text3: rgba(250, 244, 238, .62);
+}
+
+/* Calendario: la tarea en marcha en las listas de la izquierda, como píldora de la app
+   (tonal naranja, de punta redonda, con su punto latiendo), no un recuadro verde. */
+.legend-item { border-radius: 999px; padding: 5px 9px; margin: 0 -3px; }
+.legend-item.active-task {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent2) 20%, transparent);
+}
+.legend-item.active-task .legend-name { color: var(--text); font-weight: 650; }
+.legend-item.active-task .day-total-time { color: var(--accent); font-weight: 650; }
+.legend-item.active-task .legend-dot { animation: latidoPildora 2.4s ease-in-out infinite; }
+@keyframes latidoPildora {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent2) 55%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent2) 0%, transparent); }
+}
+
+/* ── Tareas (groups.html), remodelada como el Panel ──────────────────────────────
+   Las secciones son títulos, no cajas; cada tarea es una píldora como las del Panel. Al
+   pasar el ratón: el asa de arrastre, el lápiz y la papelera asoman con muelle (abriendo
+   hueco, no ocupándolo siempre) y el play es tonal naranja. */
+.group-card { background: transparent; border-radius: 0; overflow: visible; }
+.group-card:hover:not(.reorder-above, .reorder-below) { box-shadow: none; }
+.group-card.drop-target { background: var(--accent-soft); border-radius: var(--r-card); }
+.group-header { padding: 10px 8px; border-radius: 999px; }
+.group-header:hover { background: var(--bg2); }
+.group-name { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); font-weight: 700; }
+.group-card .group-tasks { gap: 6px; padding: 2px 0 10px; }
+.group-empty-hint {
+  border: 1px dashed color-mix(in srgb, var(--text) 14%, transparent); border-radius: 16px;
+  padding: 12px; color: var(--text3);
+}
+
+.archived-task-row {
+  background: var(--bg2); border-radius: 16px; padding: 10px 10px 10px 12px; gap: 8px;
+  transition: background-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.archived-task-row:hover { background: var(--bg3); }
+.archived-task-row.en-marcha {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent2) 22%, transparent);
+}
+.archived-task-row.en-marcha .archived-task-name { color: var(--text); }
+.archived-task-name { font-weight: 550; letter-spacing: -0.01em; }
+.archived-task-time { color: var(--text2); font-weight: 550; }
+
+/* El asa de arrastre y los botones de editar/borrar no ocupan sitio hasta el hover. */
+.archived-grip, .archived-edit, .archived-del {
+  width: 0; min-width: 0; margin: 0 -4px; overflow: hidden; opacity: 0; transform: scale(.6);
+  transition: width .32s var(--spring), margin .32s var(--spring), opacity var(--t-fast) var(--ease),
+              transform var(--t) var(--spring), background-color var(--t-fast);
+}
+.archived-task-row:hover .archived-grip { width: 10px; margin: 0; opacity: .45; transform: none; }
+.archived-task-row:hover .archived-edit,
+.archived-task-row:hover .archived-del { width: 28px; margin: 0; opacity: 1; transform: none; }
+.archived-edit, .archived-del { height: 28px; border-radius: 999px; }
+.archived-edit:hover { background: var(--bg3); color: var(--accent); }
+.archived-del:hover { background: var(--danger-soft); color: var(--danger); }
+
+/* El play, como en el Panel: tonal naranja; en marcha, pausa tonal roja. */
+.archived-play {
+  width: 30px; height: 30px; border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+  transition: background-color var(--t-fast) var(--ease), transform var(--t) var(--spring);
+}
+.archived-play:hover { background: var(--accent-soft-2); transform: scale(1.08); }
+.archived-play.is-playing { background: var(--danger-soft); color: var(--danger); }
+.archived-play.is-playing:hover { background: color-mix(in srgb, var(--danger) 26%, transparent); }
+.archived-dot { transition: transform var(--t) var(--spring), box-shadow var(--t-fast); }
+.archived-task-row:hover .archived-dot { transform: scale(1.2); }
+.archived-task-row .archived-dot:hover { transform: scale(1.5); }
+
+.archived-subs { margin: 4px 0 4px 26px; }
+.trash-card, .archiver-card { margin-top: 6px; }
+
+/* 2.8.3: la vista previa y la etiqueta de pegar se pueden pulsar (pegan ahí). */
+.paste-caret.con-copia .pc-preview, .paste-caret.con-copia .pc-label { pointer-events: auto; cursor: copy; }
+.paste-caret.con-copia .pc-label { transition: transform .25s var(--spring), background-color .2s; }
+.paste-caret.con-copia .pc-label:hover { transform: scale(1.06); background: var(--accent-soft-2); }
+.paste-caret.con-copia .pc-preview:hover { background: color-mix(in srgb, var(--c) 24%, transparent); }
+
+/* 2.8.3: al agarrar un rato se vuelve una gota de cristal teñida de su color: deja ver
+   (desenfocada y saturada) la rejilla de debajo, con canto de luz y un brillo arriba. Entra
+   con un pequeño "plop" de muelle. El sitio de donde sale se queda como un hueco punteado. */
+.task-block.move-ghost {
+  opacity: 1;
+  background: color-mix(in srgb, var(--c) 30%, transparent) !important;
+  -webkit-backdrop-filter: blur(7px) saturate(1.9) brightness(1.08);
+  backdrop-filter: blur(7px) saturate(1.9) brightness(1.08);
+  color: var(--text) !important;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, rgba(255,255,255,.45)),
+    inset 0 1.5px 1px rgba(255,255,255,.6),
+    inset 0 -10px 18px -12px color-mix(in srgb, var(--c) 85%, transparent),
+    0 18px 34px -14px color-mix(in srgb, var(--c) 55%, rgba(0,0,0,.65));
+  transform: scale(1.035);
+  animation: gotaAgarra .5s var(--spring);
+}
+.task-block.move-ghost::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(160deg, rgba(255,255,255,.32), rgba(255,255,255,0) 38%),
+              radial-gradient(120% 60% at 50% 115%, color-mix(in srgb, var(--c) 45%, transparent), transparent 70%);
+}
+.task-block.move-ghost .tb-name, .task-block.move-ghost .tb-time { color: var(--text) !important; position: relative; }
+:root[data-scheme="light"] .task-block.move-ghost { background: color-mix(in srgb, var(--c) 24%, rgba(255,255,255,.35)) !important; }
+@keyframes gotaAgarra {
+  0%   { transform: scale(.94, 1.04); }
+  45%  { transform: scale(1.06, .97); }
+  100% { transform: scale(1.035); }
+}
+.task-block.moving {
+  opacity: 1; background: transparent !important; box-shadow: none !important;
+  outline: 1.5px dashed color-mix(in srgb, var(--c) 60%, transparent); outline-offset: -2px;
+}
+.task-block.moving > * { opacity: .25; }
+
+/* 2.8.3: desplegable de "Días" del calendario (antes, el menú de Windows). */
+.dias-menu { position: fixed; z-index: 60; min-width: 230px; display: flex; flex-direction: column; gap: 1px; }
+.dias-menu .sort-head { font-size: 10.5px; color: var(--text3); font-weight: 700; padding: 6px 12px 4px; letter-spacing: .06em; text-transform: uppercase; }
+.dias-menu .sort-opt {
+  display: flex; align-items: center; gap: 9px; padding: 8px 12px; border: none; background: transparent;
+  color: var(--text); font-family: inherit; font-size: 13px; text-align: left; width: 100%; cursor: pointer;
+}
+.dias-menu .sort-opt:disabled { opacity: .4; cursor: default; background: transparent; }
+.dias-menu .sort-check { width: 14px; flex-shrink: 0; color: var(--accent); opacity: 0; transition: opacity .15s, transform .3s var(--spring); transform: scale(.5); }
+.dias-menu .sort-opt.active .sort-check { opacity: 1; transform: none; }
+.dias-menu .sort-sep { height: 1px; background: var(--border); margin: 4px 8px; }
+.dias-menu.cerrando { pointer-events: none; }
+.dias-menu.cerrando > :not(.lg-canvas) { animation: lgContenidoSale .15s cubic-bezier(.4,0,1,1) both; }
+.dias-menu.cerrando:not(.lg-on) { animation: lgCajaSale .18s cubic-bezier(.4,0,1,1) both; }

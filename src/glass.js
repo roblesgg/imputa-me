@@ -101,9 +101,13 @@ precision highp float;
 in vec2 v_uv;
 out vec4 fragColor;
 uniform sampler2D u_bgTexture;
+uniform vec4 u_recorte;   // xy: origen, zw: tamaño (en UV de la foto); la zona que se desenfoca
 uniform vec3 u_fondo;
+uniform int u_bgra;   // 0: RGBA (vídeo) · 1: BGRA (toBitmap) · 2: BGRA de la captura nativa (opaca)
 void main() {
-  vec4 c = texture(u_bgTexture, v_uv).bgra;
+  vec4 c = texture(u_bgTexture, u_recorte.xy + v_uv * u_recorte.zw);
+  if (u_bgra >= 1) c = c.bgra;
+  if (u_bgra == 2) c.a = 1.0;
   fragColor = vec4(c.rgb + (1.0 - c.a) * u_fondo, 1.0);
 }`;
 
@@ -252,7 +256,11 @@ void main() {
   float inside = 1.0 - smoothstep(-0.001, 0.001, merged);
   vec4 sombra = vec4(0.0, 0.0, 0.0, ms > 0.0 ? shadow : 0.6 * u_shadowFactor);
   vec4 c = mix(sombra, vec4(outColor.rgb, 1.0), inside);
-  fragColor = vec4(c.rgb, c.a * u_opacity);
+  // Alfa PREMULTIPLICADO (el lienzo se crea así, que es lo que espera el compositor): con alfa
+  // sin premultiplicar, en Windows con ventanas transparentes se veía a veces un rectángulo
+  // blanco donde el alfa es 0 (al desvanecerse un bocadillo).
+  float a = c.a * u_opacity;
+  fragColor = vec4(c.rgb * a, a);
 }`;
 
   // ── Utilidades ──────────────────────────────────────────────────────────────
@@ -299,7 +307,14 @@ void main() {
     return [0.12, 0.1, 0.11];
   }
 
+  let temaCache = null;
+  if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('theme-change', () => { temaCache = null; });
   function leerTema() {
+    if (temaCache) return temaCache;
+    temaCache = leerTemaAhora();
+    return temaCache;
+  }
+  function leerTemaAhora() {
     const cs = getComputedStyle(document.documentElement);
     const rgb = (cs.getPropertyValue('--glass-rgb') || '30,26,30').split(',').map(n => Number(n) / 255);
     const a = Number(cs.getPropertyValue('--glass-tint')) || 0.25;
@@ -316,6 +331,16 @@ void main() {
     return r;
   }
 
+  // Foto de lo que hay DETRÁS de la ventana en la pantalla (el escritorio y las demás
+  // apps), con la zona que cubre en coordenadas de pantalla. Para el panel lateral.
+  async function capturarEscritorio() {
+    let ipc = null;
+    try { ipc = require('electron').ipcRenderer; } catch { return null; }
+    const r = await ipc.invoke('capture-desktop', {});
+    if (!r || !r.data || !r.pw || !r.ph || !r.region || !r.region.w) return null;
+    return r;
+  }
+
   // ── El cristal de un elemento ───────────────────────────────────────────────
   // La esquina de superelipse (n = 5) recorta menos que un círculo del mismo radio: para que
   // el cristal case con el border-radius del elemento hace falta un radio ~2,3 veces mayor.
@@ -325,13 +350,15 @@ void main() {
     constructor(host, opts) {
       this.host = host;
       const css = parseFloat(getComputedStyle(host).borderTopLeftRadius) || 26;
-      // Opciones: foto: una foto de la ventana ya pedida (promesa); margen: px de lienzo
+      // Opciones: fuente 'ventana' (la propia app, por defecto) o 'escritorio' (lo que hay
+      // detrás de la ventana); foto: una foto ya pedida (promesa); margen: px de lienzo
       // alrededor (para la sombra); sombra: false para no pintarla; extiende: {left,right,
       // top,bottom} px que la forma sigue más allá del elemento (para que un lado pegado a
       // un borde no se redondee); dpr: resolución del lienzo; sinMarca: no poner .lg-on
-      // (quien lo usa decide cuándo quitar su fondo).
+      // (quien lo usa decide cuándo quitar su fondo); tinte: cuánto tiñe (0-1), si no el
+      // del tema.
       this.opts = Object.assign({ radius: css * SUPERELIPSE_POR_CSS, roundness: CFG.roundness, tail: null, tailRadius: 11, scale: 1,
-        foto: null, margen: null, sombra: true, extiende: null, dpr: null, sinMarca: false }, opts || {});
+        fuente: 'ventana', foto: null, margen: null, sombra: true, extiende: null, dpr: null, sinMarca: false, tinte: null, desenfoque: null, vivo: null, nativo: null }, opts || {});
       this.dpr = this.opts.dpr || Math.min(2, window.devicePixelRatio || 1);
       this.canvas = document.createElement('canvas');
       this.canvas.className = 'lg-canvas';
@@ -411,9 +438,23 @@ void main() {
 
     async init() {
       this._medir();
-      const foto = this.opts.foto ? await this.opts.foto : await capturarVentana();
+      // vivo: { video, region } — la pantalla en directo (ver pantallaEnVivo): el cristal se
+      // rehace con cada fotograma, en vez de quedarse con una foto fija.
+      // nativo: la captura DXGI de la zona de detrás (ver pantallaNativa): lo más rápido.
+      const nat = this.opts.nativo && this.opts.nativo.captura ? this.opts.nativo : null;
+      const vivo = !nat && this.opts.vivo && this.opts.vivo.video && this.opts.vivo.video.videoWidth ? this.opts.vivo : null;
+      const foto = nat ? { pw: nat.captura.ancho, ph: nat.captura.alto, region: nat.regionDIP() }
+        : vivo ? { pw: vivo.video.videoWidth, ph: vivo.video.videoHeight, region: vivo.region }
+        : this.opts.foto ? await this.opts.foto
+        : (this.opts.fuente === 'escritorio' ? await capturarEscritorio() : await capturarVentana());
       if (!foto || !this.host.isConnected) return false;
-      const gl = this.canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: false, antialias: false });
+      const gl = this.canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false });
+      // Si la GPU pierde el contexto (reinicio del driver, demasiados contextos), el lienzo no
+      // puede quedarse pintado sin contenido: se esconde y queda el esmerilado de CSS.
+      this.canvas.addEventListener('webglcontextlost', () => {
+        this.canvas.style.display = 'none';
+        this.host.classList.remove('lg-on');
+      });
       if (!gl) return false;
       this.gl = gl;
       try {
@@ -430,31 +471,32 @@ void main() {
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-      // Dónde cae la página dentro de la foto (px CSS → px de la foto).
-      this.foto = { pw: foto.pw, ph: foto.ph, k: foto.pw / foto.iw, offX: foto.offX || 0, offY: foto.offY || 0 };
+      // Dónde cae la página dentro de la foto (px CSS → px de la foto). Con una foto de la
+      // pantalla (region), el desplazamiento se calcula al pintar con la posición de la
+      // ventana, que puede cambiar de tamaño.
+      this.foto = foto.region
+        ? { pw: foto.pw, ph: foto.ph, k: foto.pw / foto.region.w, region: foto.region }
+        : { pw: foto.pw, ph: foto.ph, k: foto.pw / foto.iw, offX: foto.offX || 0, offY: foto.offY || 0 };
 
-      // Fondo a media resolución (con 30 px de desenfoque no se nota y cuesta 4 veces menos).
-      const W0 = Math.max(1, Math.ceil(foto.pw / 2)), H0 = Math.max(1, Math.ceil(foto.ph / 2));
-      const datos = foto.data instanceof Uint8Array ? foto.data : new Uint8Array(foto.data);
-      const fuente = this._textura(foto.pw, foto.ph, datos);
-      const f0 = this._destino(W0, H0), f1 = this._destino(W0, H0);
-      this.f2 = this._destino(W0, H0);
-      const tema = leerTema();
-      gl.viewport(0, 0, W0, H0);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, f0.fb); gl.useProgram(this.pBg);
-      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fuente);
-      this._u(this.pBg, 'u_bgTexture', { i: 0 }); this._u(this.pBg, 'u_fondo', tema.fondo);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-      const kernel = kernelGauss(CFG.blur * this.foto.k / 2);
-      [[this.pBlurX, f0, f1], [this.pBlurY, f1, this.f2]].forEach(([p, de, a]) => {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, a.fb); gl.useProgram(p);
-        this._u(p, 'u_resolution', [W0, H0]); this._u(p, 'u_blurRadius', { i: kernel.n }); this._u(p, 'u_blurWeights', kernel.pesos);
-        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, de.tex); this._u(p, 'u_prevPassTexture', { i: 0 });
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
-      });
-      // Lo intermedio ya no hace falta: solo se queda el fondo desenfocado.
-      gl.deleteTexture(fuente);
-      [f0, f1].forEach((f) => { gl.deleteFramebuffer(f.fb); gl.deleteTexture(f.tex); });
+      // Fondo a media resolución (con 30 px de desenfoque no se nota y cuesta 4 veces menos). La
+      // captura nativa ya llega a la mitad (la reduce la GPU): esa se desenfoca tal cual.
+      this.recorte = vivo ? this._recorteVentana() : { x: 0, y: 0, w: foto.pw, h: foto.ph };
+      this.escalaFbo = nat ? 1 : 0.5;
+      this.W0 = Math.max(1, Math.ceil(this.recorte.w * this.escalaFbo)); this.H0 = Math.max(1, Math.ceil(this.recorte.h * this.escalaFbo));
+      this.fuente = (vivo || nat) ? this._textura(foto.pw, foto.ph, null)
+        : this._textura(foto.pw, foto.ph, foto.data instanceof Uint8Array ? foto.data : new Uint8Array(foto.data));
+      this.f0 = this._destino(this.W0, this.H0); this.f1 = this._destino(this.W0, this.H0);
+      this.f2 = this._destino(this.W0, this.H0);
+      if (vivo) this._subirVideo(vivo.video);
+      if (nat && nat.captura._primero) { this._subirNativo(nat.captura._primero); nat.captura._primero = null; }
+      this._hornear(nat ? 2 : !vivo);
+      if (vivo) this._seguirVivo(vivo.video);
+      else if (nat) this._seguirNativo(nat);
+      if (!vivo && !nat) {   // con foto fija, lo intermedio ya no hace falta: solo se queda el fondo desenfocado
+        gl.deleteTexture(this.fuente); this.fuente = null;
+        [this.f0, this.f1].forEach((f) => { gl.deleteFramebuffer(f.fb); gl.deleteTexture(f.tex); });
+        this.f0 = this.f1 = null;
+      }
 
       this.host.insertBefore(this.canvas, this.host.firstChild);
       if (!this.opts.sinMarca) this.host.classList.add('lg-on');
@@ -465,6 +507,118 @@ void main() {
         this._ro.observe(this.host);
       }
       return true;
+    }
+
+    // En directo solo se desenfoca la zona de la ventana (más un margen para el desenfoque y
+    // la refracción del borde), no la pantalla entera: es ~5 % del trabajo de antes.
+    _recorteVentana() {
+      const f = this.foto, k = f.k;
+      const pad = Math.ceil(((this.opts.desenfoque != null ? this.opts.desenfoque : CFG.blur) + 60) * k);
+      const x0 = Math.max(0, Math.floor((window.screenX - f.region.x) * k) - pad);
+      const y0 = Math.max(0, Math.floor((window.screenY - f.region.y) * k) - pad);
+      const x1 = Math.min(f.pw, Math.ceil((window.screenX - f.region.x + window.innerWidth) * k) + pad);
+      const y1 = Math.min(f.ph, Math.ceil((window.screenY - f.region.y + window.innerHeight) * k) + pad);
+      return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
+    }
+
+    // Fondo: la foto (o el fotograma) a media resolución y desenfocada, en f2.
+    _hornear(bgra) {
+      const gl = this.gl, W0 = this.W0, H0 = this.H0, r = this.recorte, f = this.foto;
+      gl.viewport(0, 0, W0, H0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.f0.fb); gl.useProgram(this.pBg);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.fuente);
+      this._u(this.pBg, 'u_recorte', [r.x / f.pw, r.y / f.ph, r.w / f.pw, r.h / f.ph]);
+      this._u(this.pBg, 'u_bgTexture', { i: 0 }); this._u(this.pBg, 'u_fondo', leerTema().fondo);
+      this._u(this.pBg, 'u_bgra', { i: typeof bgra === 'number' ? bgra : (bgra ? 1 : 0) });
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      // desenfoque: px CSS (el panel lateral lo baja cuando se apaga "Difuminar el fondo").
+      if (!this._kernel) this._kernel = kernelGauss((this.opts.desenfoque != null ? this.opts.desenfoque : CFG.blur) * this.foto.k * (this.escalaFbo || 0.5));
+      const kernel = this._kernel;
+      [[this.pBlurX, this.f0, this.f1], [this.pBlurY, this.f1, this.f2]].forEach(([p, de, a]) => {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, a.fb); gl.useProgram(p);
+        this._u(p, 'u_resolution', [W0, H0]); this._u(p, 'u_blurRadius', { i: kernel.n }); this._u(p, 'u_blurWeights', kernel.pesos);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, de.tex); this._u(p, 'u_prevPassTexture', { i: 0 });
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      });
+    }
+
+    _subirVideo(video) {
+      const gl = this.gl;
+      gl.bindTexture(gl.TEXTURE_2D, this.fuente);
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, video); } catch {}
+    }
+
+    // Un fotograma de la captura nativa (BGRA con relleno por fila) a la textura de fondo. Si la
+    // zona cambió de tamaño (ventana movida a otro borde, panel más ancho), se rehacen texturas.
+    _subirNativo(fr) {
+      const gl = this.gl;
+      if (fr.ancho !== this.foto.pw || fr.alto !== this.foto.ph) {
+        const region = this._nativo ? this._nativo.regionDIP() : this.foto.region;
+        this.foto = { pw: fr.ancho, ph: fr.alto, k: fr.ancho / region.w, region };
+        this.recorte = { x: 0, y: 0, w: fr.ancho, h: fr.alto };
+        this.W0 = fr.ancho; this.H0 = fr.alto; this._kernel = null;
+        gl.deleteTexture(this.fuente); this.fuente = this._textura(fr.ancho, fr.alto, null);
+        [this.f0, this.f1, this.f2].forEach((d) => { if (d) { gl.deleteFramebuffer(d.fb); gl.deleteTexture(d.tex); } });
+        this.f0 = this._destino(this.W0, this.H0); this.f1 = this._destino(this.W0, this.H0); this.f2 = this._destino(this.W0, this.H0);
+      }
+      gl.bindTexture(gl.TEXTURE_2D, this.fuente);
+      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, fr.paso / 4);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, fr.ancho, fr.alto, gl.RGBA, gl.UNSIGNED_BYTE, fr.datos);
+      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+    }
+
+    // Cada fotograma de pantalla: si hay uno nuevo detrás (la captura no da nada si no cambió),
+    // se sube y se desenfoca; si el elemento o la ventana se han movido, se vuelve a medir. Solo
+    // se repinta cuando algo ha cambiado: con el fondo quieto no se gasta nada.
+    _seguirNativo(nat) {
+      this._nativo = nat;
+      let ultimo = '';
+      const paso = () => {
+        if (!this.gl) return;
+        // Pase lo que pase en un fotograma (la GPU se reinicia, cambia la resolución...), el
+        // bucle sigue: la captura se recupera sola y mientras tanto queda el último fondo.
+        try {
+          let pintar = false;
+          if (nat.sincronizar && nat.sincronizar()) {
+            const region = nat.regionDIP();
+            this.foto.region = region; this.foto.k = this.foto.pw / region.w;
+            pintar = true;
+          }
+          const fr = pausaCaptura ? null : nat.captura.leer();
+          if (fr) { this._subirNativo(fr); this._hornear(2); pintar = true; }
+          const r = this.host.getBoundingClientRect();
+          const clave = r.left + ',' + r.top + ',' + r.width + ',' + r.height + ',' + window.screenX + ',' + window.screenY;
+          if (clave !== ultimo) { ultimo = clave; this._medir(); pintar = true; }
+          if (pintar) this.draw();
+        } catch (e) {
+          if (!this._avisado) { this._avisado = true; console.warn('[glass] captura nativa:', e && e.message); }
+        }
+        this._rafVivo = requestAnimationFrame(paso);
+      };
+      this._rafVivo = requestAnimationFrame(paso);
+    }
+
+    // Con cada fotograma nuevo de la pantalla: subirlo, desenfocarlo y repintar el cristal.
+    _seguirVivo(video) {
+      if (typeof video.requestVideoFrameCallback !== 'function') return;
+      this._video = video;
+      const otro = () => {
+        if (!this.gl) return;
+        // Si la ventana se ha movido (se puede arrastrar), el recorte va con ella.
+        const r = this._recorteVentana();
+        if (r.x !== this.recorte.x || r.y !== this.recorte.y || r.w !== this.recorte.w || r.h !== this.recorte.h) {
+          const gl = this.gl;
+          this.recorte = r;
+          this.W0 = Math.max(1, Math.ceil(r.w / 2)); this.H0 = Math.max(1, Math.ceil(r.h / 2));
+          [this.f0, this.f1, this.f2].forEach((d) => { if (d) { gl.deleteFramebuffer(d.fb); gl.deleteTexture(d.tex); } });
+          this.f0 = this._destino(this.W0, this.H0); this.f1 = this._destino(this.W0, this.H0); this.f2 = this._destino(this.W0, this.H0);
+        }
+        this._medir();
+        if (!pausaCaptura) { this._subirVideo(video); this._hornear(false); }
+        this.draw();
+        this._vfc = video.requestVideoFrameCallback(otro);
+      };
+      this._vfc = video.requestVideoFrameCallback(otro);
     }
 
     reflow() {
@@ -493,19 +647,27 @@ void main() {
       const cy = H - (this.margen + this.forma.h / 2 + (eB - eT) / 2 + off.y) * dpr;
       const tail = this.opts.tail;
       const f = this.foto, c = this.caja;
-      this._u(p, 'u_uvOrigin', [(c.left + f.offX) * f.k / f.pw, (c.top + c.height + f.offY) * f.k / f.ph]);
-      this._u(p, 'u_uvScale', [c.width * f.k / f.pw, -c.height * f.k / f.ph]);
+      const offX = f.region ? (window.screenX - f.region.x) : f.offX;
+      const offY = f.region ? (window.screenY - f.region.y) : f.offY;
+      const rc = this.recorte;
+      this._u(p, 'u_uvOrigin', [((c.left + offX) * f.k - rc.x) / rc.w, ((c.top + c.height + offY) * f.k - rc.y) / rc.h]);
+      this._u(p, 'u_uvScale', [c.width * f.k / rc.w, -c.height * f.k / rc.h]);
       this._u(p, 'u_resolution', [W, H]); this._u(p, 'u_dpr', dpr);
       this._u(p, 'u_shapeCenter', [cx, cy]);
-      this._u(p, 'u_shapeWidth', fw * s); this._u(p, 'u_shapeHeight', fh * s);
-      this._u(p, 'u_shapeRadius', Math.min(this.opts.radius, Math.min(fw, fh) / 2) * s);
-      this._u(p, 'u_shapeRoundness', this.opts.roundness);
+      // sx / sy: estirado al vuelo (brotar / sumir), como una gota que se alarga al moverse.
+      // redondo (0-1): cuánto se acerca a una píldora del todo redonda (la gota, al vuelo).
+      const sx = this.opts.sx || 1, sy = this.opts.sy || 1;
+      const radioMax = Math.min(fw * sx, fh * sy) / 2 * s;
+      this._u(p, 'u_shapeWidth', fw * s * sx); this._u(p, 'u_shapeHeight', fh * s * sy);
+      this._u(p, 'u_shapeRadius', Math.min(radioMax, Math.max(this.opts.radius * s, radioMax * (this.opts.redondo || 0))));
+      // De gota, esquinas de círculo (n = 2): con la superelipse saldría un rectángulo.
+      this._u(p, 'u_shapeRoundness', this.opts.roundness + (2 - this.opts.roundness) * (this.opts.redondo || 0));
       this._u(p, 'u_showShape1', { i: tail ? 1 : 0 });
       this._u(p, 'u_tailCenter', tail ? [(this.margen + tail.x) * dpr, H - (this.margen + tail.y) * dpr] : [0, 0]);
       this._u(p, 'u_tailRadius', (this.opts.tailRadius || 11) * (tail && tail.s != null ? tail.s : 1));
       this._u(p, 'u_mergeRate', (18 * dpr) / H);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.f2.tex); this._u(p, 'u_blurredBg', { i: 0 });
-      this._u(p, 'u_tint', tema.tint);
+      this._u(p, 'u_tint', this.opts.tinte != null ? [tema.tint[0], tema.tint[1], tema.tint[2], this.opts.tinte] : tema.tint);
       this._u(p, 'u_refThickness', CFG.refThickness); this._u(p, 'u_refDistance', CFG.refDistance);
       this._u(p, 'u_refFactor', CFG.refFactor);
       this._u(p, 'u_refFresnelRange', CFG.fresRange); this._u(p, 'u_refFresnelHardness', CFG.fresHard); this._u(p, 'u_refFresnelFactor', CFG.fresFactor);
@@ -580,6 +742,78 @@ void main() {
       paso(t0);
     }
 
+    // Entrada líquida desde un punto de fuera (el borde de la pantalla): asoma una gota por
+    // ahí, viaja estirándose hasta su sitio y se abre en la forma con un rebote; la gota de
+    // la que sale se queda atrás y se suelta. `desde` va en px del elemento.
+    brotar(ms = 780, desde, alFinal) {
+      cancelAnimationFrame(this._raf);
+      const cx = this.forma.w / 2, cy = this.forma.h / 2;
+      const dx = desde.x - cx, dy = desde.y - cy;
+      const horizontal = Math.abs(dx) >= Math.abs(dy);
+      const radioGota = this.opts.tailRadius;
+      this.opts.tail = { x: desde.x, y: desde.y, s: 0 };
+      this.opts.tailRadius = 24;
+      this._medir();   // que la gota quepa en el lienzo
+      const muelle = (t) => 1 - Math.exp(-6 * t) * Math.cos(8.5 * t);
+      const t0 = performance.now();
+      const paso = (ahora) => {
+        if (!this.gl) return;
+        const t = Math.min(1, Math.max(0, (ahora - t0) / ms));
+        // Viaja pequeña (como gota) y, al llegar, se abre con muelle.
+        const viaje = 1 - Math.pow(1 - Math.min(1, t / 0.42), 3);
+        const abre = Math.max(0, (t - 0.3) / 0.7);
+        const estira = Math.sin(Math.PI * Math.min(1, t / 0.42)) * (1 - Math.min(1, abre * 2.5));
+        this.opts.offset = { x: dx * (1 - viaje), y: dy * (1 - viaje) };
+        this.opts.scale = 0.16 + 0.12 * viaje + 0.72 * muelle(abre);
+        this.opts.sx = horizontal ? 1 + 0.7 * estira : 1 - 0.25 * estira;
+        this.opts.sy = horizontal ? 1 - 0.25 * estira : 1 + 0.7 * estira;
+        this.opts.redondo = 1 - Math.min(1, abre * 1.6);
+        this.opts.tail.s = Math.min(1, t * 10) * Math.max(0, 1 - Math.max(0, t - 0.2) / 0.3);
+        this.opacity = Math.min(1, t * 6);
+        this.draw();
+        if (t < 1) { this._raf = requestAnimationFrame(paso); return; }
+        Object.assign(this.opts, { offset: null, scale: 1, sx: 1, sy: 1, redondo: 0, tail: null, tailRadius: radioGota });
+        this.opacity = 1;
+        this.reflow();
+        if (alFinal) alFinal();
+      };
+      paso(t0);
+    }
+
+    // Lo contrario: amaga, se recoge en una gota, sale disparada hacia `hacia` estirándose y
+    // se funde con otra gota que asoma en el borde, que también se va.
+    sumir(ms = 560, hacia) {
+      return new Promise((res) => {
+        cancelAnimationFrame(this._raf);
+        const cx = this.forma.w / 2, cy = this.forma.h / 2;
+        const dx = hacia.x - cx, dy = hacia.y - cy;
+        const horizontal = Math.abs(dx) >= Math.abs(dy);
+        this.opts.tail = { x: hacia.x, y: hacia.y, s: 0 };
+        this.opts.tailRadius = 24;
+        this._medir();
+        const t0 = performance.now();
+        const paso = (ahora) => {
+          if (!this.gl) return res();
+          const t = Math.min(1, (ahora - t0) / ms);
+          const entre = (a, b) => Math.min(1, Math.max(0, (t - a) / (b - a)));
+          const amago = t < 0.12 ? Math.sin(Math.PI * t / 0.12) * 0.04 : 0;
+          const c = entre(0.08, 0.5), cierra = c * c * (3 - 2 * c);    // se recoge en gota
+          const v = entre(0.38, 1), viaje = v * v;                     // y se va acelerando
+          const estira = Math.sin(Math.PI * v);
+          this.opts.offset = { x: dx * viaje, y: dy * viaje };
+          this.opts.scale = 1 - amago - 0.78 * cierra;
+          this.opts.redondo = cierra;
+          this.opts.sx = horizontal ? 1 + 0.55 * estira : 1 - 0.25 * estira;
+          this.opts.sy = horizontal ? 1 - 0.25 * estira : 1 + 0.55 * estira;
+          this.opts.tail.s = entre(0.6, 0.8) * (1 - entre(0.88, 1));
+          this.opacity = 1 - entre(0.86, 1);
+          this.draw();
+          if (t < 1) this._raf = requestAnimationFrame(paso); else res();
+        };
+        this._raf = requestAnimationFrame(paso);
+      });
+    }
+
     // Mover la gotita (el bocadillo se ha recolocado).
     setTail(tail) {
       this.opts.tail = tail ? Object.assign({ s: 1 }, tail) : null;
@@ -588,13 +822,30 @@ void main() {
 
     detach() {
       cancelAnimationFrame(this._raf);
+      cancelAnimationFrame(this._rafVivo);
+      if (this._video && this._vfc != null) { try { this._video.cancelVideoFrameCallback(this._vfc); } catch {} }
       if (this._ro) { this._ro.disconnect(); this._ro = null; }
+      // Primero se deja de ver (fuera del árbol y oculto) y el contexto se suelta DOS fotogramas
+      // después: si se perdía en el mismo instante, el compositor podía pintar ese fotograma un
+      // lienzo sin contexto (el rectángulo blanco que salía a veces al cerrar).
+      this.canvas.style.display = 'none';
       if (this.canvas.parentNode) this.canvas.remove();
       // Si al mismo elemento ya se le ha puesto otro cristal (se reabrió mientras este se
       // iba), la marca se queda para él.
       if (!this.host.querySelector(':scope > .lg-canvas')) this.host.classList.remove('lg-on');
-      try { const lose = this.gl && this.gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); } catch {}
+      const gl = this.gl;
       this.gl = null;
+      if (!gl) return;
+      const soltar = () => {
+        try {
+          [this.f0, this.f1, this.f2].forEach((d) => { if (d) { gl.deleteFramebuffer(d.fb); gl.deleteTexture(d.tex); } });
+          if (this.fuente) gl.deleteTexture(this.fuente);
+          const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
+        } catch {}
+        this.f0 = this.f1 = this.f2 = this.fuente = null;
+      };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(soltar));
+      else soltar();
     }
   }
 
@@ -612,5 +863,73 @@ void main() {
     }
   }
 
-  global.LiquidGlass = { attach, supported, CFG };
+  // La pantalla en directo para el cristal (vídeo de la pantalla en la que está la ventana).
+  // La ventana se excluye de la captura (main.js, 'fuente-pantalla'), así no se ve a sí misma.
+  // Devuelve { video, region, parar() } o null.
+  async function pantallaEnVivo(fps) {
+    let ipc = null;
+    try { ipc = require('electron').ipcRenderer; } catch { return null; }
+    try {
+      const f = await ipc.invoke('fuente-pantalla');
+      if (!f) return null;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { mandatory: {
+        chromeMediaSource: 'desktop', chromeMediaSourceId: f.id,
+        maxWidth: Math.round(f.region.w / 2), maxHeight: Math.round(f.region.h / 2), maxFrameRate: fps || 60 } } });
+      const video = document.createElement('video');
+      video.muted = true; video.srcObject = stream;
+      await video.play();
+      if (!video.videoWidth) await new Promise(r => video.addEventListener('loadedmetadata', r, { once: true }));
+      return { video, region: f.region, parar() { stream.getTracks().forEach(t => t.stop()); video.srcObject = null; } };
+    } catch (e) {
+      console.warn('[glass] sin pantalla en directo:', e && e.message);
+      return null;
+    }
+  }
+
+  // La zona de detrás del cristal con DXGI Desktop Duplication (src/captura-dxgi.js): 1-2
+  // fotogramas de retraso, sin la cola de vídeo de Chromium. zona: { x, y, w, h } en px de la
+  // ventana (o una función que la devuelva); se mueve con la ventana. Devuelve null si no se
+  // puede (no es Windows, gráfica sin Desktop Duplication...) y entonces se usa pantallaEnVivo.
+  async function pantallaNativa(zona) {
+    let ipc = null, Captura = null;
+    try {
+      ipc = require('electron').ipcRenderer;
+      Captura = require('./captura-dxgi.js').CapturaDXGI;
+    } catch { return null; }
+    if (!Captura || !Captura.disponible()) return null;
+    const m = await ipc.invoke('fuente-dxgi').catch(() => null);   // y la ventana deja de salir en capturas
+    if (!m) return null;
+    const zonaDIP = () => {
+      const z = typeof zona === 'function' ? zona() : zona;
+      return { x: window.screenX + z.x, y: window.screenY + z.y, w: z.w, h: z.h };
+    };
+    const aFis = (z) => ({ x: m.fis.x + (z.x - m.dip.x) * m.sf, y: m.fis.y + (z.y - m.dip.y) * m.sf, w: z.w * m.sf, h: z.h * m.sf });
+    const aDip = (z) => ({ x: m.dip.x + (z.x - m.fis.x) / m.sf, y: m.dip.y + (z.y - m.fis.y) / m.sf, w: z.w / m.sf, h: z.h / m.sf });
+    let actual = zonaDIP();
+    const c = Captura.crear(aFis(actual), { mitad: true });
+    if (!c) return null;
+    // El primer fotograma (la imagen entera del escritorio) llega enseguida.
+    let primero = null;
+    for (let i = 0; i < 30 && !primero; i++) { primero = c.leer(); if (!primero) await new Promise(r => setTimeout(r, 8)); }
+    c._primero = primero;
+    return {
+      captura: c,
+      regionDIP: () => aDip(c.zona),
+      sincronizar() {
+        const z = zonaDIP();
+        if (z.x === actual.x && z.y === actual.y && z.w === actual.w && z.h === actual.h) return false;
+        actual = z;
+        c.mover(aFis(z));
+        return true;
+      },
+      parar() { c.cerrar(); },
+    };
+  }
+
+  // Mientras el usuario hace una captura de pantalla, la ventana deja de estar excluida (para salir
+  // en ella): el cristal se queda con su último fotograma para no verse a sí mismo (main.js).
+  let pausaCaptura = false;
+  try { require('electron').ipcRenderer.on('captura-pausa', (_, on) => { pausaCaptura = !!on; }); } catch {}
+
+  global.LiquidGlass = { attach, supported, pantallaEnVivo, pantallaNativa, CFG };
 })(typeof window !== 'undefined' ? window : globalThis);

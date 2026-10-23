@@ -99,6 +99,34 @@ ipcMain.handle('capture-region', async (event) => {
   return { data, pw, ph, iw: sitio.iw, ih: sitio.ih, offX: sitio.x, offY: sitio.y };
 });
 
+// La captura nativa del cristal (src/captura-dxgi.js) lee la pantalla real: aquí solo hace falta
+// decirle dónde está la pantalla principal (la ventana de la captura no se ve en pantalla).
+ipcMain.handle('fuente-dxgi', () => {
+  const { screen } = require('electron');
+  const d = screen.getPrimaryDisplay();
+  const fis = screen.dipToScreenRect(null, d.bounds);
+  return { dip: d.bounds, fis, sf: fis.width / d.bounds.width };
+});
+
+// Lo de detrás de la ventana (el recordatorio): un escritorio de mentira con manchas de
+// color, en BGRA como lo da toBitmap en Windows.
+ipcMain.handle('capture-desktop', async (event) => {
+  const { w, h, x, y } = await event.sender.executeJavaScript('({ w: innerWidth, h: innerHeight, x: screenX, y: screenY })');
+  const data = Buffer.alloc(w * h * 4);
+  const manchas = [[0.15, 0.3, 0.45, [255, 122, 89]], [0.7, 0.95, 0.55, [91, 140, 255]], [0.95, 0.05, 0.35, [255, 209, 102]], [0.45, 0.6, 0.3, [48, 196, 141]]];
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    let c = [42, 35, 64];
+    manchas.forEach(([mx, my, r, col]) => {
+      const d = Math.hypot(i / w - mx, (j / h - my) * h / w) / r;
+      const a = Math.max(0, 1 - d * d);
+      c = c.map((v, k) => v + (col[k] - v) * a);
+    });
+    const o = (j * w + i) * 4;
+    data[o] = c[2]; data[o + 1] = c[1]; data[o + 2] = c[0]; data[o + 3] = 255;
+  }
+  return { data, pw: w, ph: h, region: { x, y, w, h } };
+});
+
 app.whenReady().then(() => {
   const win = new BrowserWindow({
     width: Number(ancho), height: Number(alto), show: false,

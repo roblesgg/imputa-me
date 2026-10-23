@@ -1,6 +1,6 @@
 {
   "name": "imputa-me",
-  "version": "2.8.2",
+  "version": "2.8.3",
   "description": "imputa.me — registra y consulta tus horas por tarea",
   "main": "main.js",
   "author": "imputa.me",
@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "koffi": "^2.16.3"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -27,9 +28,12 @@
       "sync.js",
       "themes.js",
       "palettes.js",
+      "desenfoque-windows.js",
+      "capturas-windows.js",
       "src/**/*",
       "assets/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/koffi/build/koffi/!(win32_x64)/**"
     ],
     "directories": {
       "output": "release"
@@ -64,6 +68,9 @@
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "installerHeaderIcon": "assets/icon.ico"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/koffi/build/koffi/win32_x64/**"
+    ]
   }
 }

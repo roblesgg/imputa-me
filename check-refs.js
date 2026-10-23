@@ -36,6 +36,7 @@ const GLOBALS = new Set(['require', 'setTimeout', 'setInterval', 'clearTimeout',
   // definidas en shared.js, que las páginas cargan con <script src> aparte:
   'isViewVisibleToUser', 'startTutorialIfNeeded', 'computeBackMinutes', 'contrastTextColor',
   'applyThemeVars', 'tutAllStepIds', 'tutIsVisible', 'runTutorial', 'askText', 'pickImputeUrl',
+  'seguidorDeForma', 'formaDeElemento',
   // definida en calendar-dnd.js, que calendar.html carga aparte:
   'createCalendarDnD']);
 
